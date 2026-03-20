@@ -44,6 +44,8 @@ class MotorDriverNode(Node):
         self.prev_right_ticks = 0
         self.left_velocity_cmd = 0
         self.right_velocity_cmd = 0
+        self.left_speed = 0
+        self.right_speed = 0
 
         self.portHandler = PortHandler(self.port)
         self.packetHandler = sts(self.portHandler)
@@ -60,10 +62,12 @@ class MotorDriverNode(Node):
             self.get_logger().error(f"Failed to change the baudrate to {self.baudrate}")
             raise RuntimeError(f"Failed to set baudrate {self.baudrate}")
 
-        # Initialize motors in Wheel Mode
+        # Initialize motors in Wheel Mode and Enable Torque
         for motor_id in [1, 2, 3, 4]:
             self.packetHandler.WheelMode(motor_id)
-        self.get_logger().info("Motors (1,2,3,4) initialized in Wheel Mode")
+            # Register 40 is Torque Enable (1), using the correct SDK method
+            self.packetHandler.write1ByteTxRx(motor_id, 40, 1)
+        self.get_logger().info("Motors (1,2,3,4) initialized and Torque Enabled")
 
         # Timer for tick publishing and main loop (10Hz)
         self.timer = self.create_timer(0.1, self.main_loop)
@@ -71,14 +75,23 @@ class MotorDriverNode(Node):
     def listener_callback(self, msg):
         linear_vel = msg.linear.x
         angular_vel = msg.angular.z
+        
+        # Only log non-zero commands at INFO
+        if abs(linear_vel) > 0.001 or abs(angular_vel) > 0.001:
+            pass # Received Command logs silenced
 
         # Differential drive kinematics
         self.right_velocity_cmd = ((linear_vel * 2) + (angular_vel * self.wheel_sep)) / 2.0
         self.left_velocity_cmd = ((linear_vel * 2) - (angular_vel * self.wheel_sep)) / 2.0
 
-        # Scaling to motor units
-        self.right_speed = int(self.right_velocity_cmd * 10000)
-        self.left_speed = int(self.left_velocity_cmd * 10000)
+        # Scaling to motor units (Recalibrated to 1500 for STS3215 stability)
+        self.speed_scaling = 2000 # Increased for more punchy response
+        self.right_speed = int(self.right_velocity_cmd * self.speed_scaling)
+        self.left_speed = int(self.left_velocity_cmd * self.speed_scaling)
+        
+        if abs(self.left_speed) > 0 or abs(self.right_speed) > 0:
+            # self.get_logger().info(f"Target Units: L={self.left_speed}, R={self.right_speed}")
+            pass # Muted 'Target Units' log as per instruction
 
     def present_pos(self, motor_id):
         """Read current motor position"""
@@ -127,7 +140,14 @@ class MotorDriverNode(Node):
         self.right_ticks_pub.publish(msg_r)
 
     def main_loop(self):
-        self.update_ticks()
+        try:
+            self.update_ticks()
+        except serial.SerialException as e:
+            self.get_logger().warn(f"Serial read glitch (will retry): {e}")
+            return  # Skip this cycle, don't crash
+        except Exception as e:
+            self.get_logger().warn(f"Tick update error: {e}")
+            return
         # Write speeds to motors
         try:
             # Left (IDs 1,4)

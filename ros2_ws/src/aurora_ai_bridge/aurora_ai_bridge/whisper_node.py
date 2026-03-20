@@ -92,8 +92,8 @@ class WhisperNode(Node):
         if self.is_recording:
             self.audio_data_list.append(audio_block)
             
-        # Trigger on sound (0.05 RMS requires a clear, closer voice)
-        if rms > 0.05: 
+        # Trigger on sound (0.02 RMS is more sensitive to softer speech)
+        if rms > 0.02: 
             if not self.is_recording:
                 self.get_logger().info("Sound detected, listening...")
                 self.is_recording = True

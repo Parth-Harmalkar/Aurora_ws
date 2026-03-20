@@ -39,10 +39,11 @@ class ImuNode(Node):
             # Orientation (Quaternion)
             quat = self.sensor.quaternion
             if quat and None not in quat:
-                msg.orientation.x = float(quat[0])
-                msg.orientation.y = float(quat[1])
-                msg.orientation.z = float(quat[2])
-                msg.orientation.w = float(quat[3])
+                # adafruit_bno055 returns (w, x, y, z)
+                msg.orientation.x = float(quat[1])
+                msg.orientation.y = float(quat[2])
+                msg.orientation.z = float(quat[3])
+                msg.orientation.w = float(quat[0])
 
             # Angular Velocity (rad/s)
             gyro = self.sensor.gyro

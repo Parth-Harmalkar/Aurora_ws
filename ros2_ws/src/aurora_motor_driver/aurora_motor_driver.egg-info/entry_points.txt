@@ -1,0 +1,2 @@
+[console_scripts]
+motor_node = aurora_motor_driver.motor_node:main
