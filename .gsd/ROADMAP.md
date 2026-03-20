@@ -15,7 +15,8 @@
 - **Add**: Ultrasonic-to-Range integration for short-range protection.
 - **Goal**: Mapping an unknown environment and basic navigation.
 
-### Phase 3: Intelligence Layer (Experimental)
+### Phase 3: Intelligence Layer
+**Status**: ✅ Complete (STT background install pending)
 - Implement **ai_bridge_node** (ROS2 <-> LangGraph).
 - Integrate **Ollama (3B INT4)** for high-level reasoning.
 - **Add**: Basic voice input (**Whisper**) + Text/Console response.
