@@ -1,43 +1,42 @@
-# RESEARCH.md — Project Research & Recommendations
+# RESEARCH.md — Project Research & Recommendations (Finalized)
 
-## 1. Nav2 + SLAM Integration
-**Existing Source of Truth**: `/home/aurora/arjuna2_ws/src/odometry` (EKF_data_pub.cpp).
--   **Topic Alignment**:
-    -   Odometry: `/odom` (nav_msgs/Odometry) published by `ekf_odom_pub` node.
-    -   Lidar: `/scan` (sensor_msgs/LaserScan) published by `sllidar_node`.
-    -   IMU: `/imu/data` (sensor_msgs/Imu) - confirm if `aurora_imu` or `ros-imu-bno055` is used.
--   **SLAM Choice**: **SLAM Toolbox (Asynchronous)**.
-    -   *Rationale*: More robust than Gmapping for dynamic environments and provides better map-saving/loading as a service. Asynchronous mode prevents blocking Real-Time ROS2 threads on the Orin Nano.
--   **Tuning Strategy**:
-    -   **DDS**: Switch to `Cyclone DDS` for better stability with high-bandwidth Lidar/Vision data.
-    -   **Transforms**: Ensure `static_transform_publisher` covers `base_link` -> `laser` and `base_link` -> `imu`.
+## 1. Hardware & Control Architecture
+-   **Topic Remapping**: The `robot_localization` (EKF) node must remap its output from `/odometry/filtered` to the standard `/odom` topic. This ensures Nav2 has a direct, fused source of truth without drunk behavior.
+-   **Velocity Arbitration (`twist_mux`)**: Mandatory. All velocity sources (Nav2, AI, Manual, Safety) must pipe through a `twist_mux` node.
+    -   **Priorities**:
+        1. Safety/Obstacle Stop: 100
+        2. Teleop (Manual): 50
+        3. Nav2 (Autonomous): 10
+        4. AI (Semantic Commands): 5
+    -   **Output**: The multiplexer outputs to `/cmd_vel` which the `aurora_motor_driver` subscribes to.
 
-## 2. OAK-D Lite on Jetson Orin Nano
--   **Driver**: Use `depthai_ros_driver` (Component-based).
--   **Optimization**:
-    -   **Resolution**: Set RGB/Depth to 400p/480p to minimize Jetson CPU/Bus load.
-    -   **Hardware Acceleration**: Leverage DepthAI's internal VPU for edge inference (YOLOv8-node) to offload the Jetson GPU for Global LLM reasoning.
-    -   **Transport**: Use `compressed` image transport if visualizing remotely, otherwise use intra-process for local perception nodes.
+## 2. Sensor Integration Strategy
+-   **Ultrasonic (US)**: Convert `ultrasonic_distances` (Float32MultiArray) to `sensor_msgs/Range` or `sensor_msgs/LaserScan` (simulated).
+    -   *Recommendation*: `Range` sensorsintegrated into Nav2 costmaps as `range` layers for near-field obstacle inflation.
+-   **OAK-D Lite**: Implement **On-Device Inference**.
+    -   *Model*: YOLOv8n or MobileNet-SSD running on the OAK's Myriad X VPU.
+    -   *Rationale*: Frees up Jetson Orin Nano GPU/CPU for the high-level LLM and heavy Nav2 calculations.
 
-## 3. Ollama on Jetson Orin Nano (8GB)
--   **Feasibility**: High.
--   **Model Recommendations**:
-    -   **Primary**: `Llama-3.2-3B` or `Phi-3-mini (3.8B)` (Quantized INT4).
-    -   *Rationale*: 8GB is tight. A 3B model leaves ~5.5GB for ROS2/Navigation/Perception. An 8B model would consume ~6GB+, which is risky for real-time robotics.
--   **Storage**: Ensure models are stored on an NVMe SSD (boot drive or mount).
--   **Performance**: Expected 15-25 tokens/sec, sufficient for command reasoning.
+## 3. High-Level AI Layer (Intelligence)
+-   **Decoupled Control Loop**:
+    -   **Real-Time Layer**: ROS2 Nav2 + SLAM + EKF (Safety/Motion).
+    -   **Strategic Layer**: LLM (Ollama) as a "Goal Dispatcher".
+    -   *Flow*: `User -> LLM -> Semantic Resolve -> Nav2 Goal (Action)`.
+-   **Behavioral State Machine**: Use a Behavior Tree (Nav2 native) or a lightweight State Machine (e.g., SMPY) to manage robot modes (IDLE, NAVIGATING, FOLLOWING, ERROR).
 
-## 4. ROS2 + AI Integration Architecture
--   **Proposed Pipeline**:
-    `Human (Command) -> Whisper (Text-to-Speech, Optional) -> "Intelligence Node" -> Ollama (Reasoning) -> Nav2 Goal / Velocity Commands`
--   **Semantic Mapping**:
-    -   Maintain a simple JSON lookup: `{"kitchen": [x, y, z, w], "door": [...]}`.
-    -   The LLM will be given this context in its System Prompt to resolve "go to kitchen" into coordinates.
--   **Latency Strategy**:
-    -   **Async reasoning**: The robot should NOT stop while thinking. The LLM should update/override goals asynchronously.
-    -   **Local Bridge**: Use a Python-based bridge node using `ollama-python` library or `llama_ros`.
+## 4. Semantic Mapping & Memory
+-   **Storage Strategy**: Store labeled poses in `.gsd/maps/semantic_tags.yaml`.
+-   **Format**:
+    ```yaml
+    kitchen:
+      position: {x: 1.2, y: 3.4, z: 0.0}
+      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+    ```
+-   **Update Protocol**: Provide a CLI service to "Tag Current Pose" during manual mapping.
 
-## Final Subsystem Decisions
-1. **Move `odometry` package**: Transfer `odometry` from `arjuna2_ws` to `aurora_ws/ros2_ws/src`.
-2. **Unified Launch**: Create `aurora_bringup` to launch hardware, then `aurora_nav` for SLAM/Nav2.
-3. **Dedicated AI Package**: Create `aurora_ai` to handle Ollama communication and command dispatch.
+## Final Decision Summary
+1.  **EKF Output**: Remapped to `/odom`.
+2.  **Motion Control**: `twist_mux` installed and configured.
+3.  **Vision**: On-device inference enforced.
+4.  **AI**: Decoupled from real-time loop; Goal-oriented only.
+5.  **Behavior**: Nav2 Behavior Tree customized for AI triggers.

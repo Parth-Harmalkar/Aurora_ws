@@ -1,29 +1,29 @@
-# REQUIREMENTS.md
+# REQUIREMENTS.md (Finalized)
 
-## Hardware Integration (Brownfield)
+## Control & Arbitration
 | ID | Requirement | Source | Status |
 |----|-------------|--------|--------|
-| REQ-01 | Reuse `aurora_motor_driver` for `/cmd_vel` to motor command conversion. | SPEC Goal 4 | Pending |
-| REQ-02 | Integrate `odometry` package to publish `/odom` from encoder/IMU fusion. | SPEC Goal 4 | Pending |
-| REQ-03 | Ensure RPLidar C1 publishes 360° `LaserScan` on `/scan`. | SPEC Goal 4 | Pending |
+| REQ-01 | **EKF Alignment**: `robot_localization` must publish directly to `/odom`. | Arch Fix 1 | Pending |
+| REQ-02 | **Twist Mux**: Implement `twist_mux` for velocity arbitration (Nav2 vs AI vs Safety). | Arch Fix 2 | Pending |
+| REQ-03 | **Motor Output**: `aurora_motor_driver` subscribes to the muxed `/cmd_vel`. | Arch Fix 2 | Pending |
 
-## Navigation & SLAM
+## Sensor & Perception
 | ID | Requirement | Source | Status |
 |----|-------------|--------|--------|
-| REQ-04 | Configure SLAM Toolbox in asynchronous mode for real-time mapping. | SPEC Goal 1 | Pending |
-| REQ-05 | Implement Nav2 stack with Global/Local planners tuned for differential drive. | SPEC Goal 1 | Pending |
-| REQ-06 | Provide a service to save and load static maps for localized navigation. | SPEC Goal 1 | Pending |
+| REQ-04 | **US Conversion**: Node to convert I2C ultrasonic data to `sensor_msgs/Range`. | Arch Fix 3 | Pending |
+| REQ-05 | **Costmap Integration**: Nav2 local costmap includes a `Range` layer for US data. | Arch Fix 3 | Pending |
+| REQ-06 | **Edge AI**: OAK-D Lite performs on-device object detection (YOLOv8n). | Arch Fix 4 | Pending |
 
-## Vision & Perception
+## Intelligence & Behavioral Layer
 | ID | Requirement | Source | Status |
 |----|-------------|--------|--------|
-| REQ-07 | Integrate OAK-D Lite using `depthai_ros_driver` for RGB-D data. | SPEC Goal 3 | Pending |
-| REQ-08 | Implement real-time object detection (e.g., YOLOv8) on OAK hardware. | SPEC Goal 3 | Pending |
-| REQ-09 | Publish detected objects as persistent semantic landmarks in a local database. | SPEC Goal 3 | Pending |
+| REQ-07 | **Asynchronous AI**: Ollama reasoning runs outside the real-time control loop. | Arch Fix 5 | Pending |
+| REQ-11 | **Behavior Tree**: Extend Nav2 Behavior Tree to handle "AI-Triggered" goals. | Arch Fix 6 | Pending |
+| REQ-12 | **Semantic Store**: Load/Save system for `semantic_tags.yaml` with a "tag" service. | Arch Fix 7 | Pending |
 
-## Intelligence Layer (AI)
+## Core Hardware (arjuna2_ws)
 | ID | Requirement | Source | Status |
 |----|-------------|--------|--------|
-| REQ-10 | Run Ollama locally on Jetson Orin Nano with `llama3.2:3b` model. | SPEC Goal 2 | Pending |
-| REQ-11 | Develop a ROS2 Intelligence Node to bridge LLM reasoning with Nav2 Actions. | SPEC Goal 2 | Pending |
-| REQ-12 | Parse natural language commands into JSON-structured robot instructions. | SPEC Goal 2 | Pending |
+| REQ-08 | **Ticks**: Port `Arjuna_Ticks_Pub.py` (Topic: `left_ticks`, `right_ticks`). | arjuna2_ws | Pending |
+| REQ-09 | **Odom Source**: Port `EKF_data_pub.cpp` for wheel-odometry generation. | arjuna2_ws | Pending |
+| REQ-10 | **IMU/Lidar**: Verified driver launch with correctly mapped device paths. | arjuna2_ws | Pending |
