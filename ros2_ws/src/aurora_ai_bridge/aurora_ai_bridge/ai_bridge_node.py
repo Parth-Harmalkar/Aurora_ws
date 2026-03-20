@@ -4,6 +4,7 @@ from rclpy.node import Node
 from std_msgs.msg import String
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import Range
+from vision_msgs.msg import Detection3DArray
 from .reasoning import create_reasoning_graph
 import json
 
@@ -16,6 +17,10 @@ class AIBridgeNode(Node):
         self.cmd_sub = self.create_subscription(String, '/voice_command', self.command_callback, 10)
         self.us_fl_sub = self.create_subscription(Range, '/ultrasonic/front_left', self.us_fl_callback, 10)
         self.us_fr_sub = self.create_subscription(Range, '/ultrasonic/front_right', self.us_fr_callback, 10)
+        self.vision_sub = self.create_subscription(Detection3DArray, '/oak/nn/spatial_detections', self.vision_callback, 10)
+        
+        # VOC Class Mapping for default OAK-D MobileNet
+        self.voc_labels = ["background", "aeroplane", "bicycle", "bird", "boat", "bottle", "bus", "car", "cat", "chair", "cow", "diningtable", "dog", "horse", "motorbike", "person", "pottedplant", "sheep", "sofa", "train", "tvmonitor"]
         
         # Sensor State Memory
         self.sensor_state = {
@@ -43,6 +48,28 @@ class AIBridgeNode(Node):
     def us_fr_callback(self, msg):
         dist = msg.range
         self.sensor_state["front_right"] = f"{dist:.2f}m" if dist < 2.0 else "Clear"
+
+    def vision_callback(self, msg):
+        if not msg.detections:
+            self.sensor_state["vision"] = "Vision clear (No objects detected)."
+            return
+            
+        objs = []
+        for d in msg.detections:
+            if not d.results: continue
+            class_id = int(d.results[0].hypothesis.class_id)
+            score = d.results[0].hypothesis.score
+            z_dist = d.bbox.center.position.z # depth distance in meters
+            
+            label = self.voc_labels[class_id] if 0 <= class_id < len(self.voc_labels) else f"Unknown({class_id})"
+            
+            if score > 0.5:
+                objs.append(f"{label} at {z_dist:.1f}m")
+                
+        if objs:
+            self.sensor_state["vision"] = ", ".join(objs)
+        else:
+            self.sensor_state["vision"] = "Vision clear (No objects detected)."
 
     def command_callback(self, msg):
         self.get_logger().info("Received command: '%s'" % msg.data)
