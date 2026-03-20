@@ -1,0 +1,4 @@
+[console_scripts]
+ai_bridge_node = aurora_ai_bridge.ai_bridge_node:main
+custom_teleop = aurora_ai_bridge.custom_teleop:main
+whisper_node = aurora_ai_bridge.whisper_node:main
