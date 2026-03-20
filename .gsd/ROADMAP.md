@@ -1,42 +1,76 @@
-# ROADMAP.md (Refined Architecture)
+# 🚀 Project Roadmap: Intelligent Autonomous Mobile Robot (AMR)
 
-> **Current Phase**: Research (Phase 1 Refinement)
-> **Goal**: 100% Reliable Autonomous Assistant on 8GB Memory
+**North Star:** 
+An intelligent mobile agent that perceives, maps, understands, remembers, and acts autonomously in dynamic environments without pre-loaded maps, running exclusively on a Jetson Orin Nano (8GB).
 
-## Phases
+---
 
-### Phase 1: Foundation (Hardware + Navigation)
-- Port `arjuna2_ws` drivers.
-- **Add**: `twist_mux`, emergency stop layer, and odom remapping.
-- **Goal**: Basic Teleop + Fused Odom.
+## 🎯 Engineering Objectives
+1. **Explore Unknown Spaces:** Perform real-time SLAM & dynamic updates.
+2. **Scene Understanding:** Combine Lidar & OAK-D Lite Vision to identify free space and objects.
+3. **Natural Language Interaction:** Command parsing ("Go to kitchen", "Follow me") and conversational personality.
+4. **Persistent Memory:** Remember semantic locations ("charging station") and object-level memory ("chair near table").
+5. **Real-time Safe:** Navigation and obstacle avoidance MUST NOT bottleneck on LLM latency.
+6. **Mandatory Base:** Extend `arjuna2_ws`. Reuse existing motor control, odometry, and Lidar drivers.
 
-### Phase 2: Mapping & Short-Range Perception
-- Configure SLAM Toolbox (Async) & Nav2.
-- **Add**: Ultrasonic-to-Range integration for short-range protection.
-- **Goal**: Mapping an unknown environment and basic navigation.
+---
 
-### Phase 3: Intelligence Layer
-**Status**: ✅ Complete (STT background install pending)
-- Implement **ai_bridge_node** (ROS2 <-> LangGraph).
-- Integrate **Ollama (3B INT4)** for high-level reasoning.
-- **Add**: Basic voice input (**Whisper**) + Text/Console response.
-- **Optimization**: Memory profiling and ZRAM setup.
+## 📅 Execution Phases
 
-### Phase 4: OS-Level Agent (The Assistant)
-- Tool wrappers for Shell, File System, and Python.
-- Lightweight Browser agent (Playwright).
-- **Goal**: Execute digital tasks via voice/chat.
+### Phase 1: Hardware Foundation & Low-Level Control ✅
+**Objective:** Establish the reliable base ROS2 hardware stack.
+- **Hardware:** Jetson Orin Nano, Waveshare Motor Driver, BNO055 IMU.
+- **Tasks:**
+  - Port existing `arjuna2_ws`.
+  - Integrate motor control, encoder ticks, and IMU.
+  - Implement `twist_mux` for velocity command arbitration.
 
-### Phase 5: Voice & Emotion (The Personality)
-- Add **Coqui XTTS v2** for emotional speech output.
-- Implement emotion tagging based on intent/context.
-- **Goal**: Human-like interaction with expressive tone.
+### Phase 2: Dynamic Mapping & Short-Range Perception ✅
+**Objective:** Real-time Lidar SLAM for unknown environments and immediate obstacle avoidance.
+- **Hardware:** RPLidar C1, ESP32 Ultrasonic Array.
+- **Tasks:**
+  - Configure Async SLAM Toolbox for dynamic map updating without preloaded maps.
+  - Implement Nav2 for autonomous navigation.
+  - Integrate ultrasonic sensors as a Nav2 `range_layer` to detect low/invisible obstacles.
+  - Handle moving obstacles and sensor noise via costmap inflations.
 
-### Phase 6: Memory & Context
-- **ChromaDB** for interaction history and semantic spatial tags.
-- Persistent location memory ("Go home", "Kitchen").
+### Phase 3: The Intelligence Bridge (Local AI Base) ✅
+**Objective:** Hardware-to-AI translation and basic natural language processing.
+- **Hardware:** USB Microphone.
+- **Tasks:**
+  - Implement `ai_bridge_node` (ROS2 ↔ LangGraph).
+  - Integrate local LLM (Ollama 3B-7B) for fast reasoning.
+  - Deploy Whisper for local STT (Speech-to-Text) with robust VAD (Voice Activity Detection).
+  - Convert high-level semantic intents ("Stop", "Turn left") into actionable `/cmd_vel` goals.
 
-### Phase 7: Optimization & Stress Test
-- GPU/CPU profiling.
-- Node-level latency tracking.
-- Memory stress testing (Maximum simultaneous load).
+### Phase 4: Visual SLAM & Scene Understanding (The Camera) 🚧
+**Objective:** Add rich 3D vision and depth to enable object recognition and feature-rich localization.
+- **Hardware:** OAK-D Lite (DepthAI).
+- **Tasks:**
+  - Integrate OAK-D Lite ROS2 drivers into the stack.
+  - Enable onboard VPU inference (Object Detection / Scene Understanding).
+  - Combine Lidar SLAM with Visual SLAM for robust localization under changing layouts.
+  - Feed object classifications (camera spatial inputs) directly into the ROS2 framework for the AI reasoning layer to perceive ("What do you see?").
+
+### Phase 5: Semantic Mapping & Persistent Memory
+**Objective:** Long-term episodic and spatial memory enabling the robot to understand *what* a location is.
+- **Technology:** ChromaDB (Local Vector Database).
+- **Tasks:**
+  - Store interaction history and spatial map coordinates persistently.
+  - Enable explicit spatial learning ("This is the kitchen", "This is the charging station").
+  - Enable object-level spatial memory by remembering the last Nav2 coordinate where an object was seen by the OAK-D Lite.
+  - Retrieve Nav2 waypoints dynamically from semantic NLP requests ("Go to the couch").
+
+### Phase 6: Autonomous Personality & Follower Interactions
+**Objective:** True companion behaviors and proactive AI presence.
+- **Tasks:**
+  - Implement Text-to-Speech (TTS) for natural, conversational audio responses.
+  - Develop a semantic "Follow Me" capability: Combine OAK-D Lite person-tracking bounding boxes with Nav2 dynamic waypoints to chase a human safely.
+  - Evolve the LangGraph reasoner into a continuous background loop to act proactively (e.g. initiate conversation if battery is low), maintaining a consistent behavior style/personality.
+
+### Phase 7: Optimization & Real-Time Safety Guarantee
+**Objective:** Finalize the 8GB Jetson constraint limits.
+- **Tasks:**
+  - Guarantee real-time safe execution: Ensure Nav2 and motor controllers are strictly isolated from LLM latency drops.
+  - Profile GPU/CPU load to balance OAK-D inference, Lidar SLAM, and Ollama reasoning simultaneously.
+  - Final stress testing across dynamic, completely unmapped environments.
