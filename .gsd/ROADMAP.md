@@ -43,8 +43,10 @@ An intelligent mobile agent that perceives, maps, understands, remembers, and ac
   - Deploy Whisper for local STT (Speech-to-Text) with robust VAD (Voice Activity Detection).
   - Convert high-level semantic intents ("Stop", "Turn left") into actionable `/cmd_vel` goals.
 
-### Phase 4: Visual SLAM & Scene Understanding (The Camera) 🚧
-**Objective:** Add rich 3D vision and depth to enable object recognition and feature-rich localization.
+### ✅ Phase 4: Visual SLAM & Scene Understanding (OAK-D Lite)
+- Integrate DepthAI tools for the OAK-D Lite camera. *(Completed)*
+- Overlay Camera Vision / Depth Maps (RTAB-Map / Target Tracking) alongside Lidar. *(Completed)*
+- Connect Semantic Object Detection natively to internal ROS topics. *(Completed)*
 - **Hardware:** OAK-D Lite (DepthAI).
 - **Tasks:**
   - Integrate OAK-D Lite ROS2 drivers into the stack.
