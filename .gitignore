@@ -1,0 +1,28 @@
+# Python
+**/__pycache__/
+*.py[cod]
+*$py.class
+/aurora_env/
+/aurora_env/include/
+/aurora_env/lib//.venv/
+/venv/
+
+# ROS 2
+/ros2_ws/build/
+/ros2_ws/install/
+/ros2_ws/log/
+
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# GSD / AI Assistant
+.agent/
+.gemini/
+brain/
+*task.md
+*implementation_plan.md
+*walkthrough.md
+/docs/

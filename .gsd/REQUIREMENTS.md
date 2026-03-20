@@ -1,29 +1,26 @@
-# REQUIREMENTS.md (Finalized)
+# REQUIREMENTS.md (Embodied AI Agent)
 
-## Control & Arbitration
-| ID | Requirement | Source | Status |
+## 0. Phase 0: Memory Hardening (MANDATORY)
+| ID | Requirement | Detail | Status |
 |----|-------------|--------|--------|
-| REQ-01 | **EKF Alignment**: `robot_localization` must publish directly to `/odom`. | Arch Fix 1 | Pending |
-| REQ-02 | **Twist Mux**: Implement `twist_mux` for velocity arbitration (Nav2 vs AI vs Safety). | Arch Fix 2 | Pending |
-| REQ-03 | **Motor Output**: `aurora_motor_driver` subscribes to the muxed `/cmd_vel`. | Arch Fix 2 | Pending |
+| REQ-00 | **NVMe Swap**: 16GB NVMe-based swap file initialized. | Fix 1 | Pending |
 
-## Sensor & Perception
-| ID | Requirement | Source | Status |
+## 1. Digital & AI Agent Requirements
+| ID | Requirement | Detail | Status |
 |----|-------------|--------|--------|
-| REQ-04 | **US Conversion**: Node to convert I2C ultrasonic data to `sensor_msgs/Range`. | Arch Fix 3 | Pending |
-| REQ-05 | **Costmap Integration**: Nav2 local costmap includes a `Range` layer for US data. | Arch Fix 3 | Pending |
-| REQ-06 | **Edge AI**: OAK-D Lite performs on-device object detection (YOLOv8n). | Arch Fix 4 | Pending |
+| REQ-02 | **ai_bridge_node**: ROS2 Node to sync Robot State <-> LangGraph. | Fix 2 | Pending |
+| REQ-03 | **LangGraph Agent**: State-machine logic for multi-domain tasks. | Tool | Pending |
+| REQ-04 | **Digital Tools**: Shell, File System, and Playwright integration. | Tool | Pending |
 
-## Intelligence & Behavioral Layer
-| ID | Requirement | Source | Status |
+## 2. Voice & Emotion Requirements
+| ID | Requirement | Detail | Status |
 |----|-------------|--------|--------|
-| REQ-07 | **Asynchronous AI**: Ollama reasoning runs outside the real-time control loop. | Arch Fix 5 | Pending |
-| REQ-11 | **Behavior Tree**: Extend Nav2 Behavior Tree to handle "AI-Triggered" goals. | Arch Fix 6 | Pending |
-| REQ-12 | **Semantic Store**: Load/Save system for `semantic_tags.yaml` with a "tag" service. | Arch Fix 7 | Pending |
+| REQ-05 | **Whisper-TRT**: TensorRT-optimized STT for low latency. | Voice | Pending |
+| REQ-06 | **XTTS Streaming**: Emotional speech with <1s latency. | Voice | Pending |
 
-## Core Hardware (arjuna2_ws)
-| ID | Requirement | Source | Status |
+## 3. Robotics & Physical Requirements
+| ID | Requirement | Detail | Status |
 |----|-------------|--------|--------|
-| REQ-08 | **Ticks**: Port `Arjuna_Ticks_Pub.py` (Topic: `left_ticks`, `right_ticks`). | arjuna2_ws | Pending |
-| REQ-09 | **Odom Source**: Port `EKF_data_pub.cpp` for wheel-odometry generation. | arjuna2_ws | Pending |
-| REQ-10 | **IMU/Lidar**: Verified driver launch with correctly mapped device paths. | arjuna2_ws | Pending |
+| REQ-07 | **Arjuna Core**: Port and verify ticks/odom/IMU/Lidar. | arjuna2 | Pending |
+| REQ-08 | **twist_mux**: Velocity arbitration with priority layers. | Control | Pending |
+| REQ-09 | **Nav2 range_layer**: Integrate US sensors for inflation. | Perception| Pending |

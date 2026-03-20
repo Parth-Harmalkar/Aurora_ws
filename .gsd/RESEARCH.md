@@ -1,42 +1,22 @@
-# RESEARCH.md — Project Research & Recommendations (Finalized)
+# RESEARCH.md — Project Research & Recommendations (Embodied AI Agent)
 
-## 1. Hardware & Control Architecture
--   **Topic Remapping**: The `robot_localization` (EKF) node must remap its output from `/odometry/filtered` to the standard `/odom` topic. This ensures Nav2 has a direct, fused source of truth without drunk behavior.
--   **Velocity Arbitration (`twist_mux`)**: Mandatory. All velocity sources (Nav2, AI, Manual, Safety) must pipe through a `twist_mux` node.
-    -   **Priorities**:
-        1. Safety/Obstacle Stop: 100
-        2. Teleop (Manual): 50
-        3. Nav2 (Autonomous): 10
-        4. AI (Semantic Commands): 5
-    -   **Output**: The multiplexer outputs to `/cmd_vel` which the `aurora_motor_driver` subscribes to.
+## 1. Memory Optimization (Jetson Orin Nano 8GB)
+-   **Swap Strategy**: Disable ZRAM and allocate a **16GB NVMe-based swap file**. This provides a larger/faster safety net for LLM spikes.
+-   **Lifecycle Management**: Use **Process Isolation** for memory-heavy AI components. Specifically, we can relaunch the `Whisper` or `XTTS` nodes as needed to ensure complete memory reclamation.
+-   **KV Cache**: Tune Ollama's `num_ctx` to 2048 or 4096 max to keep the KV cache footprint small.
 
-## 2. Sensor Integration Strategy
--   **Ultrasonic (US)**: Convert `ultrasonic_distances` (Float32MultiArray) to `sensor_msgs/Range` or `sensor_msgs/LaserScan` (simulated).
-    -   *Recommendation*: `Range` sensorsintegrated into Nav2 costmaps as `range` layers for near-field obstacle inflation.
--   **OAK-D Lite**: Implement **On-Device Inference**.
-    -   *Model*: YOLOv8n or MobileNet-SSD running on the OAK's Myriad X VPU.
-    -   *Rationale*: Frees up Jetson Orin Nano GPU/CPU for the high-level LLM and heavy Nav2 calculations.
+## 2. Intelligence Bridge (`ai_bridge_node`)
+-   **Role**: A standard ROS2 Node that manages the LangGraph agent's inputs/outputs.
+-   **Data Flow**:
+    -   *Inputs*: Subscribes to `/scan`, `/odom`, `/imu/data`, `/oak/detections`, and `whisper/transcript`.
+    -   *Outputs*: Dispatches goals to Nav2 (Action Client) and publishes status strings to the UI/Voice system.
+-   **State Sync**: The bridge maintains a local JSON-based "World Model" that is updated by ROS2 topics and queried by the LangGraph agent during tool calls.
 
-## 3. High-Level AI Layer (Intelligence)
--   **Decoupled Control Loop**:
-    -   **Real-Time Layer**: ROS2 Nav2 + SLAM + EKF (Safety/Motion).
-    -   **Strategic Layer**: LLM (Ollama) as a "Goal Dispatcher".
-    -   *Flow*: `User -> LLM -> Semantic Resolve -> Nav2 Goal (Action)`.
--   **Behavioral State Machine**: Use a Behavior Tree (Nav2 native) or a lightweight State Machine (e.g., SMPY) to manage robot modes (IDLE, NAVIGATING, FOLLOWING, ERROR).
+## 3. Tool Calling & Digital Agency
+-   **Sandboxing**: Use Python `shlex` and `subprocess` for safe shell execution.
+-   **Playwright**: Use in headless mode with `--no-sandbox` and `--disable-gpu` (if necessary) to save VRAM.
+-   **Framework**: **LangGraph** provides the state management for multi-step tasks (e.g., "Find recipe -> Go to kitchen -> Read out loud").
 
-## 4. Semantic Mapping & Memory
--   **Storage Strategy**: Store labeled poses in `.gsd/maps/semantic_tags.yaml`.
--   **Format**:
-    ```yaml
-    kitchen:
-      position: {x: 1.2, y: 3.4, z: 0.0}
-      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
-    ```
--   **Update Protocol**: Provide a CLI service to "Tag Current Pose" during manual mapping.
-
-## Final Decision Summary
-1.  **EKF Output**: Remapped to `/odom`.
-2.  **Motion Control**: `twist_mux` installed and configured.
-3.  **Vision**: On-device inference enforced.
-4.  **AI**: Decoupled from real-time loop; Goal-oriented only.
-5.  **Behavior**: Nav2 Behavior Tree customized for AI triggers.
+## 4. Hardware Reference (arjuna2_ws)
+-   **Base**: 0.28m | Radius: 0.04m | Ticks: 20475.0 | Motors: `/dev/ttyUSB2`.
+-   **Safety**: `twist_mux` prioritized: `100: Emergency` > `50: Teleop` > `10: Nav2` > `5: AI`.
