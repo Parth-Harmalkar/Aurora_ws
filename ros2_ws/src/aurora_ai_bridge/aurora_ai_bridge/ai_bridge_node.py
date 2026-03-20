@@ -3,9 +3,11 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 from geometry_msgs.msg import Twist
-from sensor_msgs.msg import Range
+from sensor_msgs.msg import Range, LaserScan
+from nav_msgs.msg import Odometry
 from vision_msgs.msg import Detection3DArray
 from .reasoning import create_reasoning_graph
+import math
 import json
 
 class AIBridgeNode(Node):
@@ -18,6 +20,8 @@ class AIBridgeNode(Node):
         self.us_fl_sub = self.create_subscription(Range, '/ultrasonic/front_left', self.us_fl_callback, 10)
         self.us_fr_sub = self.create_subscription(Range, '/ultrasonic/front_right', self.us_fr_callback, 10)
         self.vision_sub = self.create_subscription(Detection3DArray, '/oak/nn/spatial_detections', self.vision_callback, 10)
+        self.scan_sub = self.create_subscription(LaserScan, '/scan', self.scan_callback, 10)
+        self.odom_sub = self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
         
         # VOC Class Mapping for default OAK-D MobileNet
         self.voc_labels = ["background", "aeroplane", "bicycle", "bird", "boat", "bottle", "bus", "car", "cat", "chair", "cow", "diningtable", "dog", "horse", "motorbike", "person", "pottedplant", "sheep", "sofa", "train", "tvmonitor"]
@@ -26,7 +30,9 @@ class AIBridgeNode(Node):
         self.sensor_state = {
             "front_left": "Clear", 
             "front_right": "Clear", 
-            "vision": "OAK-D Spatial Network Offline"
+            "vision": "OAK-D Spatial Network Offline",
+            "lidar": "Waiting for Lidar...",
+            "odom": "Waiting for Odometry..."
         }
         
         # Publishers
@@ -71,6 +77,37 @@ class AIBridgeNode(Node):
         else:
             self.sensor_state["vision"] = "Vision clear (No objects detected)."
 
+    def scan_callback(self, msg):
+        ranges = msg.ranges
+        if not ranges: return
+        
+        def g(start_deg, end_deg):
+            idx_start = int(len(ranges) * start_deg / 360.0)
+            idx_end = int(len(ranges) * end_deg / 360.0)
+            if start_deg > end_deg:
+                slice_r = ranges[idx_start:] + ranges[:idx_end]
+            else:
+                slice_r = ranges[idx_start:idx_end]
+            valid = [r for r in slice_r if r > msg.range_min and r < msg.range_max and not math.isinf(r) and not math.isnan(r)]
+            return min(valid) if valid else float('inf')
+            
+        f = g(315, 45)
+        l = g(45, 135)
+        b = g(135, 225)
+        r = g(225, 315)
+        
+        self.sensor_state["lidar"] = f"Front: {f:.1f}m, Left: {l:.1f}m, Back: {b:.1f}m, Right: {r:.1f}m".replace("infm", "Clear")
+
+    def odom_callback(self, msg):
+        x = msg.pose.pose.position.x
+        y = msg.pose.pose.position.y
+        q = msg.pose.pose.orientation
+        siny_cosp = 2 * (q.w * q.z + q.x * q.y)
+        cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
+        yaw = math.atan2(siny_cosp, cosy_cosp)
+        deg = int(math.degrees(yaw))
+        self.sensor_state["odom"] = f"X: {x:.1f}m, Y: {y:.1f}m, Heading: {deg}°"
+
     def command_callback(self, msg):
         self.get_logger().info("Received command: '%s'" % msg.data)
         # Cancel current task if new command arrives
@@ -86,7 +123,13 @@ class AIBridgeNode(Node):
         
         try:
             # Inject Sensors into AI Context
-            context_str = f"Ultrasonics -> Front Left: {self.sensor_state['front_left']}, Front Right: {self.sensor_state['front_right']} | Vision -> OAK-D: {self.sensor_state['vision']}"
+            context_str = f"""
+            [LIVE WORLD STATE SENSOR FUSION]
+            Odometry: {self.sensor_state['odom']}
+            Lidar 360: {self.sensor_state['lidar']}
+            Ultrasonics: FL: {self.sensor_state['front_left']}, FR: {self.sensor_state['front_right']}
+            Vision: {self.sensor_state['vision']}
+            """
             self.get_logger().info(f"Context applied: {context_str}")
             
             # Invoke LangGraph
