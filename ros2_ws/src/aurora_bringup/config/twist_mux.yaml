@@ -6,8 +6,12 @@ twist_mux:
         topic:   "/nav_vel"
         timeout: 0.5
         priority: 10
-      teleop:
+      teleop_joy:
         topic:   "/joy_vel"
+        timeout: 0.5
+        priority: 50
+      teleop_direct:
+        topic:   "/cmd_vel"
         timeout: 0.5
         priority: 50
       ai:

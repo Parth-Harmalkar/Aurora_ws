@@ -32,5 +32,12 @@ def generate_launch_description():
                 slam_config_path,
                 {'use_sim_time': False}
             ]
+        ),
+        
+        # Start Nav2 Navigation Stack
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                os.path.join(pkg_bringup, 'launch', 'navigation.launch.py')
+            )
         )
     ])
