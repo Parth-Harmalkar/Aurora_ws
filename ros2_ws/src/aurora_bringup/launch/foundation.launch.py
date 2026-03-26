@@ -133,7 +133,9 @@ def generate_launch_description():
             executable='static_transform_publisher',
             name='base_link_to_imu',
             output=output_cfg,
-            arguments=['0', '0', '0', '3.14159', '0', '0', 'base_link', 'imu_link']
+            # IMU mounted upside-down: roll=π flips Y and Z axes
+            # This correctly negates gyro.z (yaw rate) and gravity direction
+            arguments=['0', '0', '0', '0', '0', '3.14159', 'base_link', 'imu_link']
         ),
         Node(
             package='tf2_ros',
@@ -141,6 +143,15 @@ def generate_launch_description():
             name='base_link_to_camera',
             output=output_cfg,
             arguments=['0.1', '0', '0.1', '0', '0', '0', 'base_link', 'camera_link']
+        ),
+        # Camera optical frame: rotates from ROS convention (X-fwd, Y-left, Z-up)
+        # to optical convention (X-right, Y-down, Z-forward) for RTAB-Map/vision
+        Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name='camera_link_to_optical',
+            output=output_cfg,
+            arguments=['0', '0', '0', '-0.5', '0.5', '-0.5', '0.5', 'camera_link', 'camera_optical_frame']
         ),
         Node(
             package='tf2_ros',
