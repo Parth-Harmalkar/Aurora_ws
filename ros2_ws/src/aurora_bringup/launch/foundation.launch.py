@@ -126,7 +126,8 @@ def generate_launch_description():
             executable='static_transform_publisher',
             name='base_link_to_laser',
             output=output_cfg,
-            arguments=['0', '0', '0.09', '0', '0', '0', 'base_link', 'laser']
+            # Lidar mounted with cable backward means it scans 180 opposite to camera
+            arguments=['0', '0', '0.09', '3.14159', '0', '0', 'base_link', 'laser']
         ),
         Node(
             package='tf2_ros',
