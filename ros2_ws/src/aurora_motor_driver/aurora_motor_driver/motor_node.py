@@ -5,6 +5,7 @@ from std_msgs.msg import Int64
 import time
 import sys
 import os
+import serial
 
 # Add the current directory to sys.path so we can import the SDK
 sys.path.append(os.path.dirname(__file__))
@@ -13,7 +14,7 @@ from STservo_sdk import PortHandler, sts, COMM_SUCCESS
 class MotorDriverNode(Node):
 
     def __init__(self):
-        super().__init__('motor_driver_node')
+        super().__init__('motor_driver')
         
         # Publishers for ticks (as per arjuna2_ws)
         self.left_ticks_pub = self.create_publisher(Int64, 'left_ticks', 10)
@@ -77,15 +78,15 @@ class MotorDriverNode(Node):
         angular_vel = msg.angular.z
         
         # Only log non-zero commands at INFO
-        if abs(linear_vel) > 0.001 or abs(angular_vel) > 0.001:
-            pass # Received Command logs silenced
-
+        # if abs(linear_vel) > 0.001 or abs(angular_vel) > 0.001:
+        #    self.get_logger().info(f"Command received: lx={linear_vel:.2f}, az={angular_vel:.2f}")
+ 
         # Differential drive kinematics
         self.right_velocity_cmd = ((linear_vel * 2) + (angular_vel * self.wheel_sep)) / 2.0
         self.left_velocity_cmd = ((linear_vel * 2) - (angular_vel * self.wheel_sep)) / 2.0
-
-        # Scaling to motor units (Recalibrated to 1500 for STS3215 stability)
-        self.speed_scaling = 2000 # Increased for more punchy response
+ 
+        # Scaling to motor units (Recalibrated to 3000 for STS3215 full range)
+        self.speed_scaling = 3000 
         self.right_speed = int(self.right_velocity_cmd * self.speed_scaling)
         self.left_speed = int(self.left_velocity_cmd * self.speed_scaling)
         
@@ -111,9 +112,8 @@ class MotorDriverNode(Node):
                 if diff > 16000: diff -= 32768
                 elif diff < -16000: diff += 32768
                 
-                # Directional logic based on command
-                if self.right_velocity_cmd > 0: self.total_right_ticks += abs(diff)
-                elif self.right_velocity_cmd < 0: self.total_right_ticks -= abs(diff)
+                # Directional logic based on command (Auto-detect from diff if possible)
+                self.total_right_ticks += diff
             self.prev_right_ticks = raw_ticks_r
 
         # Left Wheel (Motor ID 1)
@@ -125,9 +125,9 @@ class MotorDriverNode(Node):
                 if diff > 16000: diff -= 32768
                 elif diff < -16000: diff += 32768
                 
-                # Directional logic (Left is inverted)
-                if self.left_velocity_cmd > 0: self.total_left_ticks += abs(diff)
-                elif self.left_velocity_cmd < 0: self.total_left_ticks -= abs(diff)
+                # Negate: left motor is commanded with -speed (mirror mount),
+                # so encoder counts backwards. Negate to get forward-positive ticks.
+                self.total_left_ticks -= diff
             self.prev_left_ticks = raw_ticks_l
 
         # Publish
@@ -162,6 +162,19 @@ class MotorDriverNode(Node):
         except Exception as e:
             self.get_logger().error(f"Motor Write Error: {e}")
 
+    def stop_motors(self):
+        """Force motors to zero speed before shutting down"""
+        self.get_logger().info("Safety Shutdown: Stopping all motors.")
+        try:
+            self.packetHandler.WriteSpec(1, 0, self.motor_acc)
+            self.packetHandler.WriteSpec(4, 0, self.motor_acc)
+            self.packetHandler.WriteSpec(2, 0, self.motor_acc)
+            self.packetHandler.WriteSpec(3, 0, self.motor_acc)
+            # Give it a tiny bit of time to send over serial before the port closes
+            time.sleep(0.1)
+        except Exception as e:
+            self.get_logger().error(f"Failed to stop motors on shutdown: {e}")
+
 def main(args=None):
     rclpy.init(args=args)
     node = MotorDriverNode()
@@ -170,10 +183,16 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
-        if node.portHandler:
+        node.stop_motors()
+        if hasattr(node, 'portHandler') and node.portHandler:
             node.portHandler.closePort()
         node.destroy_node()
-        rclpy.shutdown()
+        # Shutdown is already handled by the launch framework sometimes, 
+        # so we try/except it to avoid the noisy RCLError
+        try:
+            rclpy.shutdown()
+        except:
+            pass
 
 if __name__ == '__main__':
     main()

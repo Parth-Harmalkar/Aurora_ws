@@ -7,7 +7,11 @@ from sensor_msgs.msg import Imu
 from geometry_msgs.msg import Quaternion
 import numpy as np
 
-from adafruit_extended_bus import ExtendedI2C as I2C
+try:
+    from adafruit_extended_bus import ExtendedI2C as I2C
+    HAS_EXTENDED_BUS = True
+except ImportError:
+    HAS_EXTENDED_BUS = False
 
 class ImuNode(Node):
 
@@ -16,11 +20,18 @@ class ImuNode(Node):
         self.publisher = self.create_publisher(Imu, 'imu', 10)
 
         try:
-            # Using ExtendedI2C(1) to directly access I2C bus 1 (/dev/i2c-1)
-            # This is more robust on Jetson boards than standard busio/board mappings
-            i2c = I2C(1) 
+            if HAS_EXTENDED_BUS:
+                # Using ExtendedI2C(1) to directly access I2C bus 1 (/dev/i2c-1)
+                i2c = I2C(1) 
+                self.get_logger().info("BNO055 IMU using ExtendedI2C(1)")
+            else:
+                import board
+                import busio
+                i2c = busio.I2C(board.SCL, board.SDA)
+                self.get_logger().info("BNO055 IMU using standard board.I2C()")
+                
             self.sensor = adafruit_bno055.BNO055_I2C(i2c, address=0x28)
-            self.get_logger().info("BNO055 IMU initialized at 0x28 on I2C bus 1 (Direct)")
+            self.get_logger().info("BNO055 IMU initialized at 0x28")
         except Exception as e:
             self.get_logger().error(f"Failed to initialize BNO055: {e}")
             self.sensor = None
@@ -32,9 +43,6 @@ class ImuNode(Node):
             return
 
         msg = Imu()
-        msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = 'imu_link'
-
         try:
             # Orientation (Quaternion)
             quat = self.sensor.quaternion
@@ -58,6 +66,10 @@ class ImuNode(Node):
                 msg.linear_acceleration.x = float(acc[0])
                 msg.linear_acceleration.y = float(acc[1])
                 msg.linear_acceleration.z = float(acc[2])
+
+            # Assign timestamp AFTER the blocking I2C reads to prevent history-rewind latency in EKF
+            msg.header.stamp = self.get_clock().now().to_msg()
+            msg.header.frame_id = 'imu_link'
 
             self.publisher.publish(msg)
         except Exception as e:

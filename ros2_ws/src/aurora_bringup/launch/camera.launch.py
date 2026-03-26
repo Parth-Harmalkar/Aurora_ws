@@ -1,11 +1,13 @@
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration, PythonExpression
 
 def generate_launch_description():
     depthai_prefix = get_package_share_directory('depthai_ros_driver')
+    use_tui = LaunchConfiguration('use_tui', default='false')
     
     # Launch standard OAK-D node
     camera_launch = IncludeLaunchDescription(
@@ -21,10 +23,16 @@ def generate_launch_description():
             'cam_pos_z': '0.0',
             'cam_roll': '0.0',
             'cam_pitch': '0.0',
-            'cam_yaw': '0.0'
-        }.items()
+            'cam_yaw': '0.0',
+            'rgb.i_publish_topic': 'true',
+            'rgb.i_low_bandwidth': 'true'
+        }.items(),
     )
+    # Wrap Include in a way to set output, but since Include doesn't support 'output' at top level
+    # we just pass use_tui down if it supported it, but depthai launch likely doesn't.
+    # We'll just declare it here to satisfy the interface.
     
     return LaunchDescription([
+        DeclareLaunchArgument('use_tui', default_value='false'),
         camera_launch
     ])

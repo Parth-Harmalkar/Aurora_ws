@@ -1,4 +1,4 @@
-# Twist Mux Configuration
+# Twist Mux Configuration for Aurora
 twist_mux:
   ros__parameters:
     topics:
@@ -11,13 +11,9 @@ twist_mux:
         timeout: 0.5
         priority: 50
       teleop_direct:
-        topic:   "/cmd_vel"
+        topic:   "/teleop_vel"
         timeout: 0.5
-        priority: 50
-      ai:
-        topic:   "/ai_vel"
-        timeout: 0.5
-        priority: 5
+        priority: 60
       emergency:
         topic:   "/stop_vel"
         timeout: 0.5

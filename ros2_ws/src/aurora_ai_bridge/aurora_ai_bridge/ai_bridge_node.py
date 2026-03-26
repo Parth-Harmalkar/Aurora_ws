@@ -1,181 +1,181 @@
 import asyncio
+import time
+import os
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
-from geometry_msgs.msg import Twist
-from sensor_msgs.msg import Range, LaserScan
+from rclpy.action import ActionClient
+from std_msgs.msg import String, Int32
+from geometry_msgs.msg import Twist, PoseStamped
+from sensor_msgs.msg import Range, LaserScan, Image
 from nav_msgs.msg import Odometry
-from vision_msgs.msg import Detection3DArray
+from nav2_msgs.action import NavigateToPose
 from .reasoning import create_reasoning_graph
-import math
 import json
+import cv2
+import base64
+from cv_bridge import CvBridge
 
 class AIBridgeNode(Node):
+
+    # --- CONFIGURATION (Safe & Pro) ---
+    ALLOWED_COMMANDS = {
+        "status": "ros2 topic echo /ai_status --once",
+        "reboot_ai": "sudo systemctl restart aurora_ai",  # Example hypothetical
+        "clear_map": "ros2 service call /rtabmap/reset_odom std_srvs/srv/Empty {}"
+    }
+
+    WAYPOINTS = {
+        "home": (0.0, 0.0, 1.0),
+        "kitchen": (2.5, 1.2, 0.707),
+        "charger": (-0.5, 0.0, -1.0),
+        "table": (1.8, -0.5, 0.0)
+    }
 
     def __init__(self):
         super().__init__('ai_bridge_node')
         
         # Subscriptions
         self.cmd_sub = self.create_subscription(String, '/voice_command', self.command_callback, 10)
-        self.us_fl_sub = self.create_subscription(Range, '/ultrasonic/front_left', self.us_fl_callback, 10)
-        self.us_fr_sub = self.create_subscription(Range, '/ultrasonic/front_right', self.us_fr_callback, 10)
-        self.vision_sub = self.create_subscription(Detection3DArray, '/oak/nn/spatial_detections', self.vision_callback, 10)
-        self.scan_sub = self.create_subscription(LaserScan, '/scan', self.scan_callback, 10)
+        self.image_sub = self.create_subscription(Image, '/camera/image_raw', self.image_callback, 10)
         self.odom_sub = self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
         
-        # VOC Class Mapping for default OAK-D MobileNet
-        self.voc_labels = ["background", "aeroplane", "bicycle", "bird", "boat", "bottle", "bus", "car", "cat", "chair", "cow", "diningtable", "dog", "horse", "motorbike", "person", "pottedplant", "sheep", "sofa", "train", "tvmonitor"]
-        
-        # Sensor State Memory
-        self.sensor_state = {
-            "front_left": "Clear", 
-            "front_right": "Clear", 
-            "vision": "OAK-D Spatial Network Offline",
-            "lidar": "Waiting for Lidar...",
-            "odom": "Waiting for Odometry..."
-        }
-        
         # Publishers
-        self.vel_pub = self.create_publisher(Twist, '/ai_vel', 10)
         self.status_pub = self.create_publisher(String, '/ai_status', 10)
+        self.speech_pub = self.create_publisher(String, '/ai_speech', 10)
+        self.led_pub = self.create_publisher(Int32, '/robot_led_mode', 10) # 1: Listening, 2: Processing, 3: Success, 4: Error
+        self.vel_pub = self.create_publisher(Twist, '/stop_vel', 10) # For emergency stop
         
-        # Reasoner
+        # Nav2 Action Client
+        self._nav_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
+        
+        # Frame Caching (Reduced latency for "What do you see?")
+        self.bridge = CvBridge()
+        self.latest_frame = None
+        self.cached_frame_b64 = None
+        self.frame_cache_timer = self.create_timer(1.5, self.cache_frame_callback)
+        
+        # State
+        self.sensor_state = {"odom": "Unknown"}
         self.reasoning_graph = create_reasoning_graph()
-        
-        # Task queue for handling incoming commands asynchronously
         self.loop = asyncio.get_event_loop()
         self.current_task = None
-        self.get_logger().info("AI Bridge Semantic Perception Node Initialized")
 
-    def us_fl_callback(self, msg):
-        dist = msg.range
-        self.sensor_state["front_left"] = f"{dist:.2f}m" if dist < 2.0 else "Clear"
-
-    def us_fr_callback(self, msg):
-        dist = msg.range
-        self.sensor_state["front_right"] = f"{dist:.2f}m" if dist < 2.0 else "Clear"
-
-    def vision_callback(self, msg):
-        if not msg.detections:
-            self.sensor_state["vision"] = "Vision clear (No objects detected)."
-            return
-            
-        objs = []
-        for d in msg.detections:
-            if not d.results: continue
-            class_id = int(d.results[0].hypothesis.class_id)
-            score = d.results[0].hypothesis.score
-            z_dist = d.bbox.center.position.z # depth distance in meters
-            
-            label = self.voc_labels[class_id] if 0 <= class_id < len(self.voc_labels) else f"Unknown({class_id})"
-            
-            if score > 0.5:
-                objs.append(f"{label} at {z_dist:.1f}m")
-                
-        if objs:
-            self.sensor_state["vision"] = ", ".join(objs)
-        else:
-            self.sensor_state["vision"] = "Vision clear (No objects detected)."
-
-    def scan_callback(self, msg):
-        ranges = msg.ranges
-        if not ranges: return
-        
-        def g(start_deg, end_deg):
-            idx_start = int(len(ranges) * start_deg / 360.0)
-            idx_end = int(len(ranges) * end_deg / 360.0)
-            if start_deg > end_deg:
-                slice_r = ranges[idx_start:] + ranges[:idx_end]
-            else:
-                slice_r = ranges[idx_start:idx_end]
-            valid = [r for r in slice_r if r > msg.range_min and r < msg.range_max and not math.isinf(r) and not math.isnan(r)]
-            return min(valid) if valid else float('inf')
-            
-        f = g(315, 45)
-        l = g(45, 135)
-        b = g(135, 225)
-        r = g(225, 315)
-        
-        self.sensor_state["lidar"] = f"Front: {f:.1f}m, Left: {l:.1f}m, Back: {b:.1f}m, Right: {r:.1f}m".replace("infm", "Clear")
+        self.get_logger().info("AI Bridge Commander V2 (Safe & Refined) Initialized")
 
     def odom_callback(self, msg):
-        x = msg.pose.pose.position.x
-        y = msg.pose.pose.position.y
-        q = msg.pose.pose.orientation
-        siny_cosp = 2 * (q.w * q.z + q.x * q.y)
-        cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
-        yaw = math.atan2(siny_cosp, cosy_cosp)
-        deg = int(math.degrees(yaw))
-        self.sensor_state["odom"] = f"X: {x:.1f}m, Y: {y:.1f}m, Heading: {deg}°"
+        self.sensor_state["odom"] = f"X:{msg.pose.pose.position.x:.1f}, Y:{msg.pose.pose.position.y:.1f}"
+
+    def image_callback(self, msg):
+        try:
+            self.latest_frame = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+        except: pass
+
+    def cache_frame_callback(self):
+        """Prepare a base64 frame every 1.5s to avoid capture latency."""
+        if self.latest_frame is not None:
+            try:
+                small = cv2.resize(self.latest_frame, (320, 180))
+                _, buf = cv2.imencode(".jpg", small, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+                self.cached_frame_b64 = base64.b64encode(buf).decode("utf-8")
+            except: pass
 
     def command_callback(self, msg):
-        self.get_logger().info("Received command: '%s'" % msg.data)
-        # Cancel current task if new command arrives
+        self.get_logger().info(f"Triggered: {msg.data}")
+        self.set_led(1) # Listening/Triggered
         if self.current_task and not self.current_task.done():
             self.current_task.cancel()
-            self.publish_status("Task cancelled by new command")
-            self.stop_robot()
-            
         self.current_task = asyncio.run_coroutine_threadsafe(self.handle_ai_logic(msg.data), self.loop)
 
     async def handle_ai_logic(self, text):
-        self.publish_status("Thinking: %s" % text)
+        self.set_led(2) # Processing
+        self.publish_status("Aurora is thinking...")
         
         try:
-            # Inject Sensors into AI Context
-            context_str = f"""
-            [LIVE WORLD STATE SENSOR FUSION]
-            Odometry: {self.sensor_state['odom']}
-            Lidar 360: {self.sensor_state['lidar']}
-            Ultrasonics: FL: {self.sensor_state['front_left']}, FR: {self.sensor_state['front_right']}
-            Vision: {self.sensor_state['vision']}
-            """
-            self.get_logger().info(f"Context applied: {context_str}")
+            result = await self.loop.run_in_executor(
+                None, 
+                lambda: self.reasoning_graph.invoke({
+                    "input": text, 
+                    "sensor_context": f"Odom: {self.sensor_state['odom']}",
+                    "image": self.cached_frame_b64
+                })
+            )
             
-            # Invoke LangGraph
-            result = await self.loop.run_in_executor(None, lambda: self.reasoning_graph.invoke({"input": text, "sensor_context": context_str}))
+            plan = result.get("plan", {})
+            action = plan.get("action", "chat")
+            explanation = plan.get("explanation", "...")
             
-            if result.get("status") == "planned":
-                plan = result.get("plan", {})
-                await self.execute_plan(plan)
-            else:
-                self.publish_status("Failed to create plan")
+            self.publish_speech(explanation)
+
+            if action == "navigate":
+                await self.execute_navigation(plan.get("target"))
+            elif action == "shell":
+                await self.execute_shell(plan.get("command"))
+            elif action == "stop":
+                self.vel_pub.publish(Twist())
+                self.publish_status("Emergency stop executed.")
+            
+            self.set_led(3) # Success/Ready
+            self.publish_status("Ready.")
+
         except Exception as e:
-            self.get_logger().error("Reasoning error: %s" % str(e))
-            self.publish_status("Error in reasoning layer")
+            self.get_logger().error(f"AI Logic Error: {e}")
+            self.set_led(4) # Error
 
-    async def execute_plan(self, plan):
-        lx = float(plan.get("linear_x", 0.0))
-        az = float(plan.get("angular_z", 0.0))
-        duration = float(plan.get("duration", 0.0))
-        explanation = plan.get("explanation", "Executing AI plan")
-        
-        self.publish_status(explanation)
-        self.get_logger().info("Executing: lx=%.2f, az=%.2f for %.1fs" % (lx, az, duration))
-        
-        start_time = self.loop.time()
-        twist = Twist()
-        twist.linear.x = lx
-        twist.angular.z = az
-        
-        try:
-            while self.loop.time() - start_time < duration:
-                self.vel_pub.publish(twist)
-                await asyncio.sleep(0.1) # 10Hz control loop
-            
-            self.stop_robot()
-            self.publish_status("Task complete")
-        except asyncio.CancelledError:
-            self.stop_robot()
-            raise
+    async def execute_navigation(self, target):
+        """Handle semantic waypoints or direct coordinates."""
+        goal_msg = NavigateToPose.Goal()
+        goal_msg.pose.header.frame_id = "map"
+        goal_msg.pose.header.stamp = self.get_clock().now().to_msg()
 
-    def stop_robot(self):
-        self.vel_pub.publish(Twist())
+        x, y, w = 0.0, 0.0, 1.0
 
-    def publish_status(self, status):
-        msg = String()
-        msg.data = status
-        self.status_pub.publish(msg)
+        if isinstance(target, str) and target.lower() in self.WAYPOINTS:
+            x, y, w = self.WAYPOINTS[target.lower()]
+            self.publish_status(f"Heading to the {target}...")
+        elif isinstance(target, dict):
+            x = target.get('x', 0.0)
+            y = target.get('y', 0.0)
+            w = target.get('w', 1.0)
+            self.publish_status("Moving to coordinates.")
+        else:
+            self.publish_speech("I don't know where that is.")
+            return
+
+        goal_msg.pose.pose.position.x = float(x)
+        goal_msg.pose.pose.position.y = float(y)
+        goal_msg.pose.pose.orientation.w = float(w)
+
+        if not self._nav_client.wait_for_server(timeout_sec=5.0):
+            self.publish_status("Nav2 not responding!")
+            return
+
+        self._nav_client.send_goal_async(goal_msg)
+
+    async def execute_shell(self, cmd):
+        """Command Whitelist Implementation (Safe)."""
+        if not cmd: return
+        
+        # Check for direct whitelist matches or prefixes
+        matched = False
+        for key, full_cmd in self.ALLOWED_COMMANDS.items():
+            if cmd.lower() in key:
+                os.system(full_cmd)
+                self.publish_status(f"Executed whitelisted command: {key}")
+                matched = True
+                break
+        
+        if not matched:
+            self.get_logger().warn(f"Blocked unauthorized shell command: {cmd}")
+            self.publish_speech("Sorry, that command isn't in my whitelist.")
+
+    def set_led(self, mode):
+        self.led_pub.publish(Int32(data=mode))
+
+    def publish_status(self, text):
+        self.status_pub.publish(String(data=text))
+
+    def publish_speech(self, text):
+        self.speech_pub.publish(String(data=text))
 
 async def ros_loop(node):
     while rclpy.ok():
@@ -185,15 +185,15 @@ async def ros_loop(node):
 def main(args=None):
     rclpy.init(args=args)
     node = AIBridgeNode()
-    
     event_loop = asyncio.get_event_loop()
     try:
         event_loop.run_until_complete(ros_loop(node))
     except KeyboardInterrupt:
         pass
     finally:
-        node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            node.destroy_node()
+            rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

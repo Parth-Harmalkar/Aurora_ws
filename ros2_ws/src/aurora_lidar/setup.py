@@ -5,7 +5,7 @@ package_name = 'aurora_lidar'
 setup(
     name=package_name,
     version='0.0.0',
-    packages=find_packages(exclude=['test']),
+    packages=find_packages(exclude=['test', 'build', 'install', 'dist', '.*']),
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
@@ -24,8 +24,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'lidar_subscriber = aurora_lidar.lidar_subscriber:main',
-            'obstacle_avoidance_node = aurora_lidar.obstacle_avoidance_node:main'
+            'failsafe_stop = aurora_lidar.failsafe_stop:main'
         ],
     },
 )

@@ -1,65 +1,89 @@
-from typing import Annotated, TypedDict
-from langgraph.graph import StateGraph, END
-from langchain_ollama import OllamaLLM
+import os
 import json
+import requests
+import re
+from typing import TypedDict, Optional
+from langgraph.graph import StateGraph, END
 
 class AgentState(TypedDict):
     input: str
     sensor_context: str
+    image: Optional[str]
     plan: dict
     status: str
 
+def reasoner_node(state: AgentState):
+    """
+    Aurora's high-level brain.
+    Decides between:
+    1. navigate: Move to a waypoint or coordinate.
+    2. shell: Standard OS commands (Whitelisted in bridge).
+    3. vision: Explicit request to look at something.
+    4. stop: Emergency stop.
+    5. chat: No physical action.
+    """
+    ollama_url = os.environ.get("AURORA_OLLAMA_URL", "http://localhost:11434")
+    
+    prompt = f"""
+You are Aurora, a smart autonomous robot. 
+Current Senses: {state['sensor_context']}
+
+Analyze the user command and current senses.
+Output ONLY a valid JSON object.
+
+Action Types:
+- "navigate": Move to a target. Requires "target" (e.g. "kitchen", "home", or coordinate {{x,y,theta}}).
+- "shell": Execute a system command. Requires "command".
+- "vision": Explicitly describe the current camera view.
+- "stop": Immediate rest/stop.
+- "chat": Just a conversational response.
+
+Output Format (STRICT):
+{{
+  "action": "navigate" | "shell" | "vision" | "stop" | "chat",
+  "target": "string_or_obj",
+  "command": "string",
+  "confidence": 0.0-1.0,
+  "explanation": "Friendly response to the user"
+}}
+
+User: "{state['input']}"
+"""
+
+    try:
+        # Use moondream if image is present, else llama3.2:1b
+        model = "moondream" if state.get("image") else "llama3.2:1b"
+        
+        payload = {
+            "model": model,
+            "prompt": prompt,
+            "stream": False,
+            "format": "json",
+            "options": {"temperature": 0.1}
+        }
+        
+        if state.get("image"):
+            payload["images"] = [state["image"]]
+
+        response = requests.post(f"{ollama_url}/api/generate", json=payload, timeout=30)
+        response.raise_for_status()
+        
+        data = response.json()
+        raw_text = data.get("response", "{}").strip()
+        
+        json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+        if json_match:
+            plan = json.loads(json_match.group())
+            return {**state, "plan": plan, "status": "success"}
+        
+        return {**state, "plan": {"action": "chat", "explanation": raw_text}, "status": "partial"}
+        
+    except Exception as e:
+        return {**state, "plan": {"action": "chat", "explanation": f"Logic error: {str(e)}"}, "status": "error"}
+
 def create_reasoning_graph():
-    llm = OllamaLLM(
-    model="llama3.2:1b",
-    format="json",
-    temperature=0,
-    num_gpu=0  # Force to CPU to avoid cudaMalloc OOM on 8GB Jetson
-)
-
-    def planner_node(state: AgentState):
-        prompt = f"""
-        You are a robot mission planner. Decompose the user's command into a motor control plan.
-        
-        [LIVE SENSOR TELEMETRY]
-        {state.get('sensor_context', 'No sensor data available.')}
-        
-        CRITICAL RULE: If the user says "move forward" but the LIVE SENSOR TELEMETRY says an obstacle is less than 0.3m ahead, you MUST refuse to move and output 0.0 for all speeds.
-
-        Example 1: "move forward" (Sensor: Clear) -> {{"linear_x": 0.5, "angular_z": 0.0, "duration": 2.0, "explanation": "Moving forward"}}
-        Example 2: "turn left" -> {{"linear_x": 0.0, "angular_z": 1.0, "duration": 1.5, "explanation": "Turning left"}}
-        Example 3: "stop" -> {{"linear_x": 0.0, "angular_z": 0.0, "duration": 0.0, "explanation": "Stopping"}}
-        Example 4: "move forward" (Sensor: Obstacle FL at 0.15m) -> {{"linear_x": 0.0, "angular_z": 0.0, "duration": 0.0, "explanation": "Cannot move forward, obstacle detected directly ahead!"}}
-        
-        User Command: {state['input']}
-        
-        Reply ONLY with JSON: 
-        {{
-          "linear_x": float, 
-          "angular_z": float, 
-          "duration": float,
-          "explanation": string
-        }}
-        """
-        response = llm.invoke(prompt)
-        print(f"DEBUG: Raw AI Response: {response}")
-        try:
-            plan = json.loads(response)
-            return {"plan": plan, "status": "planned"}
-        except:
-            return {"plan": {"linear_x": 0.0, "angular_z": 0.0, "duration": 0.0}, "status": "error"}
-
-    # Define the graph
     workflow = StateGraph(AgentState)
-    workflow.add_node("planner", planner_node)
-    
-    workflow.set_entry_point("planner")
-    workflow.add_edge("planner", END)
-    
+    workflow.add_node("reasoner", reasoner_node)
+    workflow.set_entry_point("reasoner")
+    workflow.add_edge("reasoner", END)
     return workflow.compile()
-
-if __name__ == "__main__":
-    # Test
-    graph = create_reasoning_graph()
-    result = graph.invoke({"input": "move forward slowly for 2 seconds"})
-    print(json.dumps(result, indent=2))

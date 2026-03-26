@@ -1,7 +1,10 @@
-#!/home/aurora/aurora_ws/aurora_env/bin/python3
+#!/usr/bin/env python3
 """
-AURORA TELEOP V6 — Hold-to-Move
-Publishes continuously while key is held. Stops when key released.
+AURORA CUSTOM TELEOP V8 — Responsive Hold-to-Move Control
+- HOLD a key to move. Release to stop.
+- 'i/k' and 'j/l' adjust speed scales (these are sticky).
+- SPACE : emergency stop
+- 'q'   : quit
 """
 
 from geometry_msgs.msg import Twist
@@ -11,119 +14,147 @@ from rclpy.node import Node
 
 BANNER = """
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  AURORA CUSTOM TELEOP 🎮 (Hold to Move)
+  AURORA TELEOP 🎮 (Hold-to-Move)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  w / ↑  : Forward    v/b : Lx Speed +/-
-  s / ↓  : Backward   y/h : Az Speed +/-
-  a / ←  : Turn Left
-  d / →  : Turn Right  SPACE/x : E-STOP
+  w / ↑  : Forward    i / k : Lin Speed +/-
+  s / ↓  : Backward   j / l : Ang Speed +/-
+  a / ←  : Turn Left  
+  d / →  : Turn Right  SPACE : STOP
   q      : Quit
+
+  ** HOLD key to move, RELEASE to stop **
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
 
+# Movement keys map to (linear, angular) multipliers
+MOVE_KEYS = {
+    'w':      ( 1.0,  0.0),
+    's':      (-1.0,  0.0),
+    'a':      ( 0.0,  1.0),
+    'd':      ( 0.0, -1.0),
+    '\x1b[A': ( 1.0,  0.0),  # Arrow Up
+    '\x1b[B': (-1.0,  0.0),  # Arrow Down
+    '\x1b[D': ( 0.0,  1.0),  # Arrow Left
+    '\x1b[C': ( 0.0, -1.0),  # Arrow Right
+}
+
+
 class CustomTeleop(Node):
-
-    KEY_BINDINGS = {
-        'w': (1, 0),
-        's': (-1, 0),
-        'a': (0, 1),
-        'd': (0, -1),
-        '\x1b[A': (1, 0),   # Up arrow
-        '\x1b[B': (-1, 0),  # Down arrow
-        '\x1b[D': (0, 1),   # Left arrow
-        '\x1b[C': (0, -1),  # Right arrow
-    }
-
     def __init__(self):
         super().__init__('custom_teleop')
-        self.pub = self.create_publisher(Twist, '/joy_vel', 10)
-        self.lin = 1.0
-        self.ang = 1.2
+        self.pub = self.create_publisher(Twist, '/teleop_vel', 10)
+
+        # Base speeds
+        self.lin_speed = 0.3
+        self.ang_speed = 1.0
+
+        # Timeout: if no key for this long, stop
+        self.key_timeout = 0.15  # 150ms — feels responsive
+
+        self.last_key_time = time.monotonic()
+        self.current_lin = 0.0
+        self.current_ang = 0.0
+
         self.settings = termios.tcgetattr(sys.stdin)
 
-    def get_key(self, timeout=0.05):
-        """Read one keypress (or escape sequence). Returns None on timeout."""
-        rlist, _, _ = select.select([sys.stdin], [], [], timeout)
-        if not rlist:
-            return None
-        ch = sys.stdin.read(1)
-        if ch == '\x1b':
-            # Read the bracket and letter with a very short timeout
-            rlist2, _, _ = select.select([sys.stdin], [], [], 0.02)
-            if rlist2:
-                ch += sys.stdin.read(2)
-        return ch
+        # Publish at 20Hz — fast enough for smooth control, light on CPU
+        self.timer = self.create_timer(0.05, self.publish_cmd)
 
-    def publish(self, lx, az):
+    def publish_cmd(self):
+        """Timer callback: publish current velocity, auto-stop on timeout."""
+        now = time.monotonic()
+        if (now - self.last_key_time) > self.key_timeout:
+            # No key held — stop
+            self.current_lin = 0.0
+            self.current_ang = 0.0
+
         t = Twist()
-        t.linear.x = float(lx)
-        t.angular.z = float(az)
+        t.linear.x = self.current_lin
+        t.angular.z = self.current_ang
         self.pub.publish(t)
+
+    def get_key(self):
+        """Non-blocking key read with short timeout."""
+        tty.setraw(sys.stdin.fileno())
+        rlist, _, _ = select.select([sys.stdin], [], [], 0.02)
+        key = None
+        if rlist:
+            key = sys.stdin.read(1)
+            # Handle arrow key escape sequences
+            if key == '\x1b':
+                extra = sys.stdin.read(2)
+                key += extra
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.settings)
+        return key
 
     def run(self):
         print(BANNER)
-        tty.setraw(sys.stdin.fileno())
-        prev_lin_x = 0.0
-        prev_ang_z = 0.0
-
+        print(f"  Speed: lin={self.lin_speed:.2f}  ang={self.ang_speed:.2f}")
         try:
             while rclpy.ok():
-                key = self.get_key(timeout=0.05)
+                # Let ROS process the publish timer
+                rclpy.spin_once(self, timeout_sec=0.005)
 
+                key = self.get_key()
                 if key is None:
-                    # No key pressed — send stop ONLY if we were previously moving
-                    if prev_lin_x != 0.0 or prev_ang_z != 0.0:
-                        self.publish(0, 0)
-                        prev_lin_x = 0.0
-                        prev_ang_z = 0.0
-                    continue  # Skip rest of loop
+                    continue
 
-                if key == 'q':
+                # Quit
+                if key in ('q', '\x03'):
                     break
-                elif key in ('x', ' '):
-                    self.publish(0, 0)
-                    prev_lin_x = 0.0
-                    prev_ang_z = 0.0
-                elif key == 'v':
-                    self.lin = min(2.0, self.lin + 0.1)
-                    sys.stdout.write(f"\r[Linear: {self.lin:.1f} m/s]  ")
-                    sys.stdout.flush()
-                elif key == 'b':
-                    self.lin = max(0.1, self.lin - 0.1)
-                    sys.stdout.write(f"\r[Linear: {self.lin:.1f} m/s]  ")
-                    sys.stdout.flush()
-                elif key == 'y':
-                    self.ang = min(3.0, self.ang + 0.1)
-                    sys.stdout.write(f"\r[Angular: {self.ang:.1f} rad/s]  ")
-                    sys.stdout.flush()
-                elif key == 'h':
-                    self.ang = max(0.1, self.ang - 0.1)
-                    sys.stdout.write(f"\r[Angular: {self.ang:.1f} rad/s]  ")
-                    sys.stdout.flush()
-                elif key in self.KEY_BINDINGS:
-                    ldir, adir = self.KEY_BINDINGS[key]
-                    lx = ldir * self.lin
-                    az = adir * self.ang
-                    self.publish(lx, az)
-                    prev_lin_x = lx
-                    prev_ang_z = az
 
-        except Exception as e:
-            sys.stderr.write(f"\nTeleop error: {e}\n")
+                # Movement keys: set velocity while held
+                if key in MOVE_KEYS:
+                    lin_mult, ang_mult = MOVE_KEYS[key]
+                    self.current_lin = lin_mult * self.lin_speed
+                    self.current_ang = ang_mult * self.ang_speed
+                    self.last_key_time = time.monotonic()
+
+                # Speed adjustment (sticky — doesn't reset on release)
+                elif key == 'i':
+                    self.lin_speed = min(1.0, self.lin_speed + 0.05)
+                    print(f"\r  Speed: lin={self.lin_speed:.2f}  ang={self.ang_speed:.2f}   ", end='')
+                elif key == 'k':
+                    self.lin_speed = max(0.05, self.lin_speed - 0.05)
+                    print(f"\r  Speed: lin={self.lin_speed:.2f}  ang={self.ang_speed:.2f}   ", end='')
+                elif key == 'j':
+                    self.ang_speed = min(2.0, self.ang_speed + 0.1)
+                    print(f"\r  Speed: lin={self.lin_speed:.2f}  ang={self.ang_speed:.2f}   ", end='')
+                elif key == 'l':
+                    self.ang_speed = max(0.1, self.ang_speed - 0.1)
+                    print(f"\r  Speed: lin={self.lin_speed:.2f}  ang={self.ang_speed:.2f}   ", end='')
+
+                # Emergency stop
+                elif key == ' ':
+                    self.current_lin = 0.0
+                    self.current_ang = 0.0
+                    self.last_key_time = 0  # Force timeout
+                    print("\r  *** STOPPED ***                              ", end='')
+
         finally:
+            # Ensure robot stops on exit
+            self.current_lin = 0.0
+            self.current_ang = 0.0
+            for _ in range(5):
+                self.publish_cmd()
+                time.sleep(0.02)
             termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.settings)
-            try:
-                self.publish(0, 0)
-            except Exception:
-                pass
+            print("\n  Teleop exited. Robot stopped.")
 
 
 def main():
     rclpy.init()
     node = CustomTeleop()
-    node.run()
-    if rclpy.ok():
-        rclpy.shutdown()
+    try:
+        node.run()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        try:
+            rclpy.shutdown()
+        except:
+            pass
 
 
 if __name__ == '__main__':

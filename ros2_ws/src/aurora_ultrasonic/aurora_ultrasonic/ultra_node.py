@@ -62,10 +62,11 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
-        if node.bus:
-            node.bus.close()
-        node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            if node.bus:
+                node.bus.close()
+            node.destroy_node()
+            rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

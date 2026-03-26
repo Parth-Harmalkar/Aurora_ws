@@ -56,23 +56,42 @@ An intelligent mobile agent that perceives, maps, understands, remembers, and ac
 
 ### Phase 5: Semantic Mapping & Persistent Memory
 **Objective:** Long-term episodic and spatial memory enabling the robot to understand *what* a location is.
-- **Technology:** ChromaDB (Local Vector Database).
+- **Technology:** ChromaDB Lite / Spatial Registry.
 - **Tasks:**
-  - Store interaction history and spatial map coordinates persistently.
-  - Enable explicit spatial learning ("This is the kitchen", "This is the charging station").
-  - Enable object-level spatial memory by remembering the last Nav2 coordinate where an object was seen by the OAK-D Lite.
-  - Retrieve Nav2 waypoints dynamically from semantic NLP requests ("Go to the couch").
+  - [NEW] Implement a persistent "Spatial Registry" to store coordinates for named rooms ("kitchen", "bedroom").
+  - [NEW] Enable object-level "Event Memory" to remember where a specific object (person, bottle, chair) was last seen by the OAK-D.
+  - Integrate retrieval into LangGraph so the AI can say "I last saw the bottle in the kitchen."
 
-### Phase 6: Autonomous Personality & Follower Interactions
-**Objective:** True companion behaviors and proactive AI presence.
+### Phase 6: Proactive Interaction & Voice (TTS)
+**Objective:** Give Aurora a physical voice and a proactive personality.
 - **Tasks:**
-  - Implement Text-to-Speech (TTS) for natural, conversational audio responses.
-  - Develop a semantic "Follow Me" capability: Combine OAK-D Lite person-tracking bounding boxes with Nav2 dynamic waypoints to chase a human safely.
-  - Evolve the LangGraph reasoner into a continuous background loop to act proactively (e.g. initiate conversation if battery is low), maintaining a consistent behavior style/personality.
+  - [NEW] **Voice Integration:** Add a local TTS node (Piper/espeak-ng) to convert `ai_status` text into audio.
+  - [NEW] **Proactive Awareness:** Trigger spontaneous interactions when the OAK-D sees a person while the robot is idle ( greeting, perking up).
+  - [NEW] **Follow Me:** Use person-tracking from OAK-D to actively follow the user.
 
-### Phase 7: Optimization & Real-Time Safety Guarantee
-**Objective:** Finalize the 8GB Jetson constraint limits.
+### Phase 7: Optimization & "Vitals" Monitoring
+**Objective:** Finalize the 8GB Jetson performance and add self-awareness of health.
 - **Tasks:**
-  - Guarantee real-time safe execution: Ensure Nav2 and motor controllers are strictly isolated from LLM latency drops.
-  - Profile GPU/CPU load to balance OAK-D inference, Lidar SLAM, and Ollama reasoning simultaneously.
-  - Final stress testing across dynamic, completely unmapped environments.
+  - [NEW] **Vitals Node:** Monitor Battery Voltage and SoC Thermal status.
+  - [NEW] **Self-Awareness:** Teach the AI to factor "energy levels" into its personality (e.g., getting "sleepy" when low battery).
+  - Profile GPU/CPU load and ensure Nav2 has priority over LLM background tasks.
+
+### Phase 8: Embodied AI Companion ✅
+**Objective:** Basic conversational companion with safety reflexes.
+- **Completed:** Velocity clamping, Real-time obstacle reflexes, Conversational NLU, Personality/Idle curiosity movements.
+
+### Phase 9: System Reliability & Build Pipeline ✅
+**Objective:** Fix technical debt and environment issues.
+- **Completed:** `find_packages` exclusions, unified `aurora_env` shebang patching.
+
+### Phase 10: Interactive Terminal Dashboard (TUI) ✅
+**Objective:** Replace cluttered launch logs with a beautiful, live AI dashboard.
+- **Completed:** Standalone `status_monitor` tool, Log silencing, 16GB NVMe swap strategy, 8-sector Lidar spatial awareness.
+
+### Phase 11: Multi-Machine Offloading & GPU Optimization
+**Objective:** Offload heavy AI tasks to a secondary PC to achieve sub-1s reasoning.
+- **Tasks:**
+  - [NEW] **Network Sync:** Configure `ROS_DOMAIN_ID` and multicast for Jetson-to-PC discovery.
+  - [NEW] **Brain Offload:** Move `whisper_node` and `ollama` reasoning to a high-power PC.
+  - [NEW] **Hybrid Perception:** Feed Jetson Lidar/Vision into the PC-based AI over the network.
+  - [NEW] **Latency Mastery:** Restore large context (512+ tokens) with near-instant GPU response.
