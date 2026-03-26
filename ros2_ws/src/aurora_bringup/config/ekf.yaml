@@ -1,14 +1,14 @@
-### EKF Configuration for Aurora (Optimized from Arjuna)
+### EKF Configuration for Aurora (Restored from working 170c229)
 ekf_filter_node:
   ros__parameters:
-    frequency: 30.0
+    frequency: 15.0
     two_d_mode: true
-    publish_acceleration: true
+    publish_acceleration: false
     publish_tf: true
 
     map_frame: map
     odom_frame: odom
-    base_link_frame: base_footprint
+    base_link_frame: base_link
     world_frame: odom
 
     # Wheel Odometry Input
@@ -20,14 +20,14 @@ ekf_filter_node:
                    false, false, false]
     odom0_differential: false
 
-    # IMU Input (Tuned for BNO055/Aurora hardware)
+    # IMU Input (LOCKED TO 2D YAW — matches working 170c229)
     imu0: /imu/data
     imu0_config: [false, false, false,
                   false, false, true,
                   false, false, false,
                   false, false, true,
-                  true,  true,  false]
-    imu0_differential: true
+                  false, false, false]
+    imu0_differential: false
     imu0_remove_gravitational_acceleration: true
 
     # Process noise covariance (Tuned in arjuna2_ws)

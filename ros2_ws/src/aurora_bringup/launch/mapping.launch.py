@@ -23,15 +23,6 @@ def generate_launch_description():
             launch_arguments={'use_tui': use_tui}.items()
         ),
         
-        # 2. Add base_footprint -> base_link TF (Arjuna pattern)
-        Node(
-            package='tf2_ros',
-            executable='static_transform_publisher',
-            name='base_footprint_to_base_link',
-            arguments=['0', '0', '0.09', '0', '0', '0', 'base_footprint', 'base_link'],
-            output=PythonExpression(["'log' if '", use_tui, "' == 'true' else 'screen'"])
-        ),
-
         # 3. Start RTAB-Map VSLAM
         Node(
             package='rtabmap_slam',
@@ -39,7 +30,7 @@ def generate_launch_description():
             name='rtabmap',
             output=PythonExpression(["'log' if '", use_tui, "' == 'true' else 'screen'"]),
             parameters=[{
-                'frame_id': 'base_footprint',
+                'frame_id': 'base_link',
                 'subscribe_depth': True,
                 'subscribe_scan': True,   # HYBRID SLAM: Integrate Lidar
                 'subscribe_odom_info': False,

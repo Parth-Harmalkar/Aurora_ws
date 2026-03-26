@@ -133,7 +133,7 @@ private:
         nav_msgs::msg::Odometry odom_msg;
         odom_msg.header.stamp = stamp;
         odom_msg.header.frame_id = "odom";
-        odom_msg.child_frame_id = "base_footprint";
+        odom_msg.child_frame_id = "base_link";
         
         odom_msg.pose.pose.position.x = robot_x;
         odom_msg.pose.pose.position.y = robot_y;
@@ -153,7 +153,7 @@ private:
         geometry_msgs::msg::TransformStamped t;
         t.header.stamp = stamp;
         t.header.frame_id = "odom";
-        t.child_frame_id = "base_footprint";
+        t.child_frame_id = "base_link";
         t.transform.translation.x = robot_x;
         t.transform.translation.y = robot_y;
         
