@@ -16,8 +16,8 @@ class CameraNode(Node):
         self.bridge = CvBridge()
 
         # Target resolution for both RGB and depth (must match for RTAB-Map)
-        self.target_width = 320
-        self.target_height = 180
+        self.target_width = 640
+        self.target_height = 360
 
         # Create pipeline
         self.pipeline = dai.Pipeline()
@@ -27,8 +27,8 @@ class CameraNode(Node):
         cam_rgb.setBoardSocket(dai.CameraBoardSocket.RGB)
 
         cam_rgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1080_P)
-        cam_rgb.setIspScale(1, 6) # 1920x1080 -> 320x180 (Ultra-light for Jetson)
-        cam_rgb.setFps(15) # Balance between quality and CPU load
+        cam_rgb.setIspScale(1, 3) # 1920x1080 -> 640x360 (Good balance for 3D mapping)
+        cam_rgb.setFps(10) # Lower FPS to keep Jetson CPU manageable at higher res
 
         # Stereo Depth
         mono_left = self.pipeline.create(dai.node.MonoCamera)

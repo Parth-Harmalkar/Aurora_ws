@@ -52,12 +52,16 @@ def generate_launch_description():
                 'RGBD/OptimizeFromGraphEnd': 'false',
                 'RGBD/NeighborLinkRefining': 'true', # Help with small errors
                 'RGBD/ProximityBySpace': 'true',
-                'Vis/MaxFeatures': '300',
-                'Vis/MinInliers': '10',
+                'Vis/MaxFeatures': '500',
+                'Vis/MinInliers': '5',
                 'Grid/FromDepth': 'true',      # Populate 3D clouds from camera
                 'Grid/3D': 'true',             # ENABLE 3D MAPPING
                 'Grid/RayTracing': 'true',     
                 'Grid/MaxObstacleHeight': '1.5',
+                'Grid/CellSize': '0.05',       # 5cm grid cells
+                'cloud_decimation': 2,          # Use every 2nd pixel (denser cloud)
+                'cloud_voxel_size': 0.03,       # 3cm voxels for point cloud output
+                'cloud_output_voxelized': True,
                 'Mem/IncrementalMemory': 'true',
                 'Mem/InitWMWithAllNodes': 'false'
             }],
