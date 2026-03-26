@@ -50,13 +50,15 @@ def generate_launch_description():
             parameters=[{'publish_tf': False}] # robot_localization handles TF
         ),
 
-        # 3. IMU Node (Pub: /imu/data)
+        # 3. Dedicated Hardware IMU Node (BNO055 Bare-Metal Driver)
         Node(
             package='aurora_imu',
-            executable='imu_node',
-            name='imu_node',
+            executable='bno055_bare',
+            name='bno_imu_node',
             output=output_cfg,
-            remappings=[('/imu', '/imu/data')]
+            remappings=[
+                ('/bno055_raw', '/imu/data')
+            ]
         ),
 
         # 4. Lidar Node (Pub: /scan)
@@ -134,10 +136,8 @@ def generate_launch_description():
             executable='static_transform_publisher',
             name='base_link_to_imu',
             output=output_cfg,
-            # IMU mounted right-side up. Direction TBD — starting with identity.
-            # If heading goes wrong direction when turning, add yaw=π:
-            #   arguments=['0', '0', '0', '3.14159', '0', '0', 'base_link', 'imu_link']
-            arguments=['0', '0', '0', '0', '0', '0', 'base_link', 'imu_link']
+            # IMU physical transform offset against the robot centroid (User can adjust this if needed)
+            arguments=['0', '0', '0', '0', '0', '0', 'base_link', 'bno_link']
         ),
         Node(
             package='tf2_ros',
@@ -153,7 +153,16 @@ def generate_launch_description():
             executable='static_transform_publisher',
             name='camera_link_to_optical',
             output=output_cfg,
+            # Optical frame: X-right, Y-down, Z-forward
             arguments=['0', '0', '0', '-0.5', '0.5', '-0.5', '0.5', 'camera_link', 'camera_optical_frame']
+        ),
+        # Bridge Camera IMU to Optical Frame (Identity since BMI270 is PCB-aligned with sensors)
+        Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name='optical_to_imu',
+            output=output_cfg,
+            arguments=['0', '0', '0', '0', '0', '0', '1', 'camera_optical_frame', 'camera_imu_optical_frame']
         ),
         Node(
             package='tf2_ros',

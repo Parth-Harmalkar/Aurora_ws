@@ -33,9 +33,11 @@ def generate_launch_description():
                 'frame_id': 'base_link',
                 'subscribe_depth': True,
                 'subscribe_scan': True,   # HYBRID SLAM: Integrate Lidar
+                'subscribe_imu': True,    # New: Integrate Camera IMU
                 'subscribe_odom_info': False,
                 'approx_sync': True,
                 'use_sim_time': False,
+                'wait_imu_to_init': True, # Ensure gravity alignment at start
                 'sync_queue_size': 30,    # Correct name for Humble
                 'RGBD/AngularUpdate': '0.1',
                 'RGBD/LinearUpdate': '0.1',
@@ -44,15 +46,17 @@ def generate_launch_description():
                 'RGBD/NeighborLinkRefining': 'true', # Help with small errors
                 'RGBD/ProximityBySpace': 'true',
                 'Vis/MaxFeatures': '500',
-                'Vis/MinInliers': '5',
+                'Vis/MinInliers': '6',
                 'Grid/FromDepth': 'true',      # Populate 3D clouds from camera
                 'Grid/3D': 'true',             # ENABLE 3D MAPPING
                 'Grid/Sensor': '1',            # 0=lidar(2D only), 1=depth camera(3D), 2=both
                 'Grid/RayTracing': 'true',     
                 'Grid/MaxObstacleHeight': '1.5',
-                'Grid/CellSize': '0.05',       # 5cm grid cells
-                'cloud_decimation': 2,          # Use every 2nd pixel (denser cloud)
-                'cloud_voxel_size': 0.03,       # 3cm voxels for point cloud output
+                'Grid/CellSize': '0.02',       # Increased to 2cm grid cells for hyper-sharp 2D map
+                'Grid/NoiseFilteringRadius': '0.1',       # Cleans up floating ghost pixels
+                'Grid/NoiseFilteringMinNeighbors': '5',   # Cleans up floating ghost pixels
+                'cloud_decimation': 1,          # (MAX RESOLUTION) Use 100% of camera pixels!
+                'cloud_voxel_size': 0.01,       # Increased to 1cm voxels for point cloud output
                 'cloud_output_voxelized': True,
                 'Mem/IncrementalMemory': 'true',
                 'Mem/InitWMWithAllNodes': 'false'
@@ -64,6 +68,7 @@ def generate_launch_description():
                 ('/depth/camera_info', '/camera/camera_info'),
                 ('/scan', '/scan'),          # Remap Lidar
                 ('/odom', '/odom'),
+                ('/imu', '/imu/data'),      # New: Use BNO055 IMU data
                 ('/grid_map', '/map')
             ],
             arguments=['-d'] # Delete database at startup (clean map every time as requested)

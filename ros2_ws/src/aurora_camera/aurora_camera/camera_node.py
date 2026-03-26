@@ -1,7 +1,7 @@
 import depthai as dai
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import Image, CameraInfo
+from sensor_msgs.msg import Image, CameraInfo, Imu
 from cv_bridge import CvBridge
 import cv2
 import numpy as np
@@ -13,6 +13,7 @@ class CameraNode(Node):
         self.publisher = self.create_publisher(Image, 'camera/image_raw', 10)
         self.depth_publisher = self.create_publisher(Image, 'camera/depth', 10)
         self.info_publisher = self.create_publisher(CameraInfo, 'camera/camera_info', 10)
+        self.imu_publisher = self.create_publisher(Imu, 'camera/imu', 10)
         self.bridge = CvBridge()
 
         # Target resolution for both RGB and depth (must match for RTAB-Map)
@@ -49,6 +50,13 @@ class CameraNode(Node):
         mono_left.out.link(stereo.left)
         mono_right.out.link(stereo.right)
 
+        # IMU (BMI270)
+        imu = self.pipeline.create(dai.node.IMU)
+        # Enable Accel + Gyro at 100Hz
+        imu.enableIMUSensor([dai.IMUSensor.ACCELEROMETER_RAW, dai.IMUSensor.GYROSCOPE_RAW], 100)
+        imu.setBatchReportThreshold(1)
+        imu.setMaxBatchReports(10)
+
         # Outputs
         xout_rgb = self.pipeline.create(dai.node.XLinkOut)
         xout_rgb.setStreamName("rgb")
@@ -58,12 +66,17 @@ class CameraNode(Node):
         xout_depth.setStreamName("depth")
         stereo.depth.link(xout_depth.input)
 
+        xout_imu = self.pipeline.create(dai.node.XLinkOut)
+        xout_imu.setStreamName("imu")
+        imu.out.link(xout_imu.input)
+
         # Device connection
         try:
             self.device = dai.Device(self.pipeline)
             self.rgb_queue = self.device.getOutputQueue(name="rgb", maxSize=4, blocking=False)
             self.depth_queue = self.device.getOutputQueue(name="depth", maxSize=4, blocking=False)
-            self.get_logger().info("Oak-D Lite Camera with Stereo Depth initialized")
+            self.imu_queue = self.device.getOutputQueue(name="imu", maxSize=10, blocking=False)
+            self.get_logger().info("Oak-D Lite Camera (with BMI270 IMU) initialized")
         except Exception as e:
             self.get_logger().error(f"Failed to initialize Oak-D Lite: {e}")
             self.device = None
@@ -142,6 +155,36 @@ class CameraNode(Node):
             msg.header.stamp = now
             msg.header.frame_id = "camera_optical_frame"
             self.depth_publisher.publish(msg)
+
+        # Process IMU
+        imu_data = self.imu_queue.tryGet()
+        if imu_data is not None:
+            packets = imu_data.packets
+            for packet in packets:
+                accel = packet.acceleroMeter
+                gyro = packet.gyroscope
+                
+                imu_msg = Imu()
+                imu_msg.header.stamp = self.get_clock().now().to_msg()
+                imu_msg.header.frame_id = "camera_imu_optical_frame"
+                
+                # OAK-D IMU is usually aligned with camera_link
+                # Accelerometer (m/s^2)
+                imu_msg.linear_acceleration.x = float(accel.x)
+                imu_msg.linear_acceleration.y = float(accel.y)
+                imu_msg.linear_acceleration.z = float(accel.z)
+                
+                # Gyroscope (rad/s)
+                imu_msg.angular_velocity.x = float(gyro.x)
+                imu_msg.angular_velocity.y = float(gyro.y)
+                imu_msg.angular_velocity.z = float(gyro.z)
+                
+                # Orientation is usually fused in EKF, but we can set identity covariance for unused fields
+                imu_msg.orientation_covariance = [0.0] * 9
+                imu_msg.angular_velocity_covariance = [0.0] * 9
+                imu_msg.linear_acceleration_covariance = [0.0] * 9
+                
+                self.imu_publisher.publish(imu_msg)
 
 def main(args=None):
     rclpy.init(args=args)

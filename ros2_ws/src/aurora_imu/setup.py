@@ -24,7 +24,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'imu_node = aurora_imu.imu_node:main'
+            'imu_node = aurora_imu.imu_node:main',
+            'bno055_bare = aurora_imu.bno055_bare:main'
         ],
     },
 )
