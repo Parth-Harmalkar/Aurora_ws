@@ -56,6 +56,7 @@ def generate_launch_description():
                 'Vis/MinInliers': '5',
                 'Grid/FromDepth': 'true',      # Populate 3D clouds from camera
                 'Grid/3D': 'true',             # ENABLE 3D MAPPING
+                'Grid/Sensor': '1',            # 0=lidar(2D only), 1=depth camera(3D), 2=both
                 'Grid/RayTracing': 'true',     
                 'Grid/MaxObstacleHeight': '1.5',
                 'Grid/CellSize': '0.05',       # 5cm grid cells
