@@ -133,9 +133,10 @@ def generate_launch_description():
             executable='static_transform_publisher',
             name='base_link_to_imu',
             output=output_cfg,
-            # IMU mounted upside-down: roll=π flips Y and Z axes
-            # This correctly negates gyro.z (yaw rate) and gravity direction
-            arguments=['0', '0', '0', '0', '0', '3.14159', 'base_link', 'imu_link']
+            # IMU mounted right-side up. Direction TBD — starting with identity.
+            # If heading goes wrong direction when turning, add yaw=π:
+            #   arguments=['0', '0', '0', '3.14159', '0', '0', 'base_link', 'imu_link']
+            arguments=['0', '0', '0', '0', '0', '0', 'base_link', 'imu_link']
         ),
         Node(
             package='tf2_ros',
