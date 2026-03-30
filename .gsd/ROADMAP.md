@@ -65,7 +65,7 @@
 ---
 
 ### Phase 1: Nav2 Foundation Overhaul
-**Status**: ⬜ Not Started
+**Status**: ✅ Complete
 **Objective**: Replace the weak NavFn planner with Smac2D, tune RPP controller for Aurora's chassis, fix the critical RTAB-Map/Nav2 TF conflict, and harden recovery behaviors.
 
 **Key deliverables:**
