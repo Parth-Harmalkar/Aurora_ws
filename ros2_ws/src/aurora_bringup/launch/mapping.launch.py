@@ -12,10 +12,14 @@ def generate_launch_description():
     use_tui = LaunchConfiguration('use_tui', default='false')
     declare_use_tui = DeclareLaunchArgument('use_tui', default_value='false')
     
+    delete_db_on_start = LaunchConfiguration('delete_db_on_start', default='false')
+    declare_delete_db = DeclareLaunchArgument('delete_db_on_start', default_value='false', description='Erase the RTAB-Map DB at startup.')
+    
     foundation_launch_path = os.path.join(pkg_bringup, 'launch', 'foundation.launch.py')
     
     return LaunchDescription([
         declare_use_tui,
+        declare_delete_db,
         
         # 1. Bring up hardware foundation
         IncludeLaunchDescription(
@@ -30,6 +34,7 @@ def generate_launch_description():
             name='rtabmap',
             output=PythonExpression(["'log' if '", use_tui, "' == 'true' else 'screen'"]),
             parameters=[{
+                'database_path': os.path.expanduser('~/.aurora/rtabmap.db'),
                 'frame_id': 'base_link',
                 'subscribe_depth': True,
                 'subscribe_scan': True,   # HYBRID SLAM: Integrate Lidar
@@ -71,7 +76,7 @@ def generate_launch_description():
                 ('/imu', '/imu/data'),      # New: Use BNO055 IMU data
                 ('/grid_map', '/map')
             ],
-            arguments=['-d'] # Delete database at startup (clean map every time as requested)
+            arguments=PythonExpression(["['-d'] if '", delete_db_on_start, "' == 'true' else []"])
         ),
         
         # 3.5 Depth to PointCloud2 for Nav2 costmaps (CPU-efficient, no RGB)
@@ -86,6 +91,14 @@ def generate_launch_description():
                 ('camera_info', '/camera/camera_info'),
                 ('points', '/camera/depth/points')
             ]
+        ),
+
+        # 3.8 Map Saver Node (Auto-saves occupancy_grid maps every 5min and manually)
+        Node(
+            package='aurora_bringup',
+            executable='map_saver_node.py',
+            name='map_saver',
+            output=PythonExpression(["'log' if '", use_tui, "' == 'true' else 'screen'"])
         ),
 
         # 4. Start Nav2 Navigation Stack
