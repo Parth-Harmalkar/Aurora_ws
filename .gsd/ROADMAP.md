@@ -78,7 +78,7 @@
 ---
 
 ### Phase 2: Sensor-Enhanced Costmaps
-**Status**: ⬜ Not Started
+**Status**: ✅ Complete
 **Objective**: Add depth camera data to Nav2 costmaps using `depth_image_proc` (CPU-efficient), creating a multi-sensor obstacle detection layer.
 
 **Key deliverables:**
