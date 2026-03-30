@@ -79,6 +79,9 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(
                 os.path.join(pkg_bringup, 'launch', 'navigation.launch.py')
             ),
-            launch_arguments={'use_tui': use_tui}.items()
+            launch_arguments={
+                'use_tui': use_tui,
+                'slam_mode': 'true'
+            }.items()
         )
     ])
