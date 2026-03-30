@@ -1,24 +1,18 @@
 ## Current Position
 - **Milestone**: Autonomous Navigation & Mapping
-- **Phase**: Not started
-- **Status**: Milestone planned — 7 phases defined
+- **Phase**: 1 — Nav2 Foundation Overhaul
+- **Task**: Planning complete
+- **Status**: Ready for execution
 
-## Last Session Summary
-Created new milestone "Autonomous Navigation & Mapping" with 7 phases:
-1. Nav2 Foundation Overhaul (Smac2D + RPP + TF fix)
-2. Sensor-Enhanced Costmaps (depth camera in costmap)
-3. Map Persistence & Management
-4. Object Detection Pipeline (OAK-D VPU)
-5. Semantic Spatial Database (SQLite)
-6. Autonomous Frontier Exploration
-7. Unified Autonomous Launch & Integration
+## Phase 1 Plans
+- **1.1**: Smac2D Planner + RPP Controller Tuning + Recovery Hardening (wave 1)
+- **1.2**: Fix SLAM/Nav2 TF Conflict — Conditional AMCL & Map Server (wave 1)
+- **1.3**: Build Validation & Integration Check (wave 2)
 
-All 5 critical gotchas from review incorporated:
-- RTAB-Map/Nav2 TF sync
-- Frontier timing
-- Depth CPU bottleneck (depth_image_proc)
-- Detection TF correctness
-- Frontier deadlock prevention
+## Plan Verification
+- Checker status: PASSED ✓
+- All 6 dimensions validated
+- 0 blockers, 0 warnings
 
 ## Next Steps
-1. /plan 1 — Create Phase 1 execution plans (Nav2 Foundation Overhaul)
+1. /execute 1 — Run all Phase 1 plans
