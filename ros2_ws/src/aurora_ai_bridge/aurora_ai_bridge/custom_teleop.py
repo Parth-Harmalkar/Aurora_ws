@@ -13,7 +13,7 @@ import rclpy
 from rclpy.node import Node
 
 BANNER = """
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+\033[2J\033[H━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   AURORA TELEOP 🎮 (Hold-to-Move)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   w / ↑  : Forward    i / k : Lin Speed +/-
@@ -74,72 +74,98 @@ class CustomTeleop(Node):
         self.pub.publish(t)
 
     def get_key(self):
-        """Non-blocking key read with short timeout."""
-        tty.setraw(sys.stdin.fileno())
-        rlist, _, _ = select.select([sys.stdin], [], [], 0.02)
+        """Non-blocking key read. Terminal state managed by caller."""
+        rlist, _, _ = select.select([sys.stdin], [], [], 0.01)
         key = None
         if rlist:
             key = sys.stdin.read(1)
             # Handle arrow key escape sequences
             if key == '\x1b':
-                extra = sys.stdin.read(2)
-                key += extra
-        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.settings)
+                # Read additional characters if they exist in buffer
+                rlist_extra, _, _ = select.select([sys.stdin], [], [], 0.005)
+                if rlist_extra:
+                   extra = sys.stdin.read(2)
+                   key += extra
         return key
+
+    def update_ui(self, msg="IDLE"):
+        """Print status line without scrolling."""
+        # \r moves to start of line, \033[K clears line
+        # Lin and Ang speed shown with visual bars
+        lin_bar = "■" * int(self.lin_speed * 10) + "□" * (10 - int(self.lin_speed * 10))
+        ang_bar = "■" * int(self.ang_speed * 5) + "□" * (10 - int(self.ang_speed * 5))
+        
+        status = f"  STATUS: {msg:<15}"
+        speeds = f"LIN: {self.lin_speed:.2f} [{lin_bar}]  ANG: {self.ang_speed:.2f} [{ang_bar}]"
+        
+        sys.stdout.write(f"\r\033[K{status} | {speeds}")
+        sys.stdout.flush()
 
     def run(self):
         print(BANNER)
-        print(f"  Speed: lin={self.lin_speed:.2f}  ang={self.ang_speed:.2f}")
+        # Use raw mode for the entire duration of the loop
+        tty.setraw(sys.stdin.fileno())
         try:
+            prev_msg = ""
             while rclpy.ok():
                 # Let ROS process the publish timer
                 rclpy.spin_once(self, timeout_sec=0.005)
 
                 key = self.get_key()
-                if key is None:
-                    continue
+                
+                status_msg = "IDLE"
+                if self.current_lin > 0: status_msg = "MOVING FWD"
+                elif self.current_lin < 0: status_msg = "MOVING BWD"
+                elif self.current_ang > 0: status_msg = "TURNING L"
+                elif self.current_ang < 0: status_msg = "TURNING R"
 
-                # Quit
-                if key in ('q', '\x03'):
-                    break
+                if key is not None:
+                    # Quit
+                    if key in ('q', '\x03'):
+                        break
 
-                # Movement keys: set velocity while held
-                if key in MOVE_KEYS:
-                    lin_mult, ang_mult = MOVE_KEYS[key]
-                    self.current_lin = lin_mult * self.lin_speed
-                    self.current_ang = ang_mult * self.ang_speed
-                    self.last_key_time = time.monotonic()
+                    # Movement keys: set velocity while held
+                    if key in MOVE_KEYS:
+                        lin_mult, ang_mult = MOVE_KEYS[key]
+                        self.current_lin = lin_mult * self.lin_speed
+                        self.current_ang = ang_mult * self.ang_speed
+                        self.last_key_time = time.monotonic()
+                        if lin_mult > 0: status_msg = "MOVING FWD"
+                        elif lin_mult < 0: status_msg = "MOVING BWD"
+                        elif ang_mult > 0: status_msg = "TURNING L"
+                        elif ang_mult < 0: status_msg = "TURNING R"
 
-                # Speed adjustment (sticky — doesn't reset on release)
-                elif key == 'i':
-                    self.lin_speed = min(1.0, self.lin_speed + 0.05)
-                    print(f"\r  Speed: lin={self.lin_speed:.2f}  ang={self.ang_speed:.2f}   ", end='')
-                elif key == 'k':
-                    self.lin_speed = max(0.05, self.lin_speed - 0.05)
-                    print(f"\r  Speed: lin={self.lin_speed:.2f}  ang={self.ang_speed:.2f}   ", end='')
-                elif key == 'j':
-                    self.ang_speed = min(2.0, self.ang_speed + 0.1)
-                    print(f"\r  Speed: lin={self.lin_speed:.2f}  ang={self.ang_speed:.2f}   ", end='')
-                elif key == 'l':
-                    self.ang_speed = max(0.1, self.ang_speed - 0.1)
-                    print(f"\r  Speed: lin={self.lin_speed:.2f}  ang={self.ang_speed:.2f}   ", end='')
+                    # Speed adjustment
+                    elif key == 'i':
+                        self.lin_speed = min(1.0, self.lin_speed + 0.05)
+                    elif key == 'k':
+                        self.lin_speed = max(0.05, self.lin_speed - 0.05)
+                    elif key == 'j':
+                        self.ang_speed = min(2.0, self.ang_speed + 0.1)
+                    elif key == 'l':
+                        self.ang_speed = max(0.1, self.ang_speed - 0.1)
+                    elif key == ' ':
+                        self.current_lin = 0.0
+                        self.current_ang = 0.0
+                        self.last_key_time = 0
+                        status_msg = "STOPPED"
 
-                # Emergency stop
-                elif key == ' ':
-                    self.current_lin = 0.0
-                    self.current_ang = 0.0
-                    self.last_key_time = 0  # Force timeout
-                    print("\r  *** STOPPED ***                              ", end='')
+                self.update_ui(status_msg)
 
         finally:
+            # Restore terminal settings
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.settings)
+            
             # Ensure robot stops on exit
             self.current_lin = 0.0
             self.current_ang = 0.0
             for _ in range(5):
-                self.publish_cmd()
+                t = Twist()
+                t.linear.x = 0.0
+                t.angular.z = 0.0
+                self.pub.publish(t)
                 time.sleep(0.02)
-            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.settings)
-            print("\n  Teleop exited. Robot stopped.")
+            print("\n\r  Teleop exited. Robot stopped.")
 
 
 def main():
