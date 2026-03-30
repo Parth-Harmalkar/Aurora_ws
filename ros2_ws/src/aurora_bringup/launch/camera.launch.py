@@ -15,7 +15,7 @@ def generate_launch_description():
             os.path.join(depthai_prefix, 'launch', 'camera.launch.py')
         ),
         launch_arguments={
-            'camera_model': 'OAK-D-LITE',
+            'camera_model': 'OAK-D-PRO',
             'name': 'oak',
             'parent_frame': 'camera_link',
             'cam_pos_x': '0.0',
@@ -25,7 +25,11 @@ def generate_launch_description():
             'cam_pitch': '0.0',
             'cam_yaw': '0.0',
             'rgb.i_publish_topic': 'true',
-            'rgb.i_low_bandwidth': 'true'
+            'rgb.i_low_bandwidth': 'true',
+            'left.i_publish_topic': 'true',
+            'right.i_publish_topic': 'true',
+            'i_enable_ir': 'true',
+            'i_laser_dot_brightness': '800' # Typical integer value for some versions
         }.items(),
     )
     # Wrap Include in a way to set output, but since Include doesn't support 'output' at top level

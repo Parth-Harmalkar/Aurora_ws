@@ -76,9 +76,17 @@ class CameraNode(Node):
             self.rgb_queue = self.device.getOutputQueue(name="rgb", maxSize=4, blocking=False)
             self.depth_queue = self.device.getOutputQueue(name="depth", maxSize=4, blocking=False)
             self.imu_queue = self.device.getOutputQueue(name="imu", maxSize=10, blocking=False)
-            self.get_logger().info("Oak-D Lite Camera (with BMI270 IMU) initialized")
+            
+            # OAK-D Pro specific: Enable IR Dot Projector (Intensity: 0.0 to 1.0)
+            try:
+                self.device.setIrLaserDotProjectorIntensity(0.5)
+                self.get_logger().info("Oak-D Pro: IR Dot Projector enabled (Intensity: 0.5)")
+            except Exception as e:
+                self.get_logger().warn(f"Failed to enable IR Projector (might be a non-Pro model): {e}")
+
+            self.get_logger().info("Oak-D Pro Camera (IMU initialized) ready.")
         except Exception as e:
-            self.get_logger().error(f"Failed to initialize Oak-D Lite: {e}")
+            self.get_logger().error(f"Failed to initialize Oak-D Pro: {e}")
             self.device = None
             return
 
