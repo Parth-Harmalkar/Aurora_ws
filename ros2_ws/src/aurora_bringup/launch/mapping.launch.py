@@ -74,6 +74,20 @@ def generate_launch_description():
             arguments=['-d'] # Delete database at startup (clean map every time as requested)
         ),
         
+        # 3.5 Depth to PointCloud2 for Nav2 costmaps (CPU-efficient, no RGB)
+        Node(
+            package='depth_image_proc',
+            executable='point_cloud_xyz_node',
+            name='depth_to_pointcloud',
+            output=PythonExpression(["'log' if '", use_tui, "' == 'true' else 'screen'"]),
+            parameters=[{'queue_size': 5}],
+            remappings=[
+                ('image_rect', '/camera/depth'),
+                ('camera_info', '/camera/camera_info'),
+                ('points', '/camera/depth/points')
+            ]
+        ),
+
         # 4. Start Nav2 Navigation Stack
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
