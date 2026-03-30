@@ -90,7 +90,7 @@
 ---
 
 ### Phase 3: Map Persistence & Management
-**Status**: ⬜ Not Started
+**Status**: ✅ Complete
 **Objective**: Make maps survive restarts by persisting RTAB-Map database and providing map save/load services.
 
 **Key deliverables:**
