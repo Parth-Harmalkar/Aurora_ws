@@ -1,28 +1,29 @@
-# Research: Phase 3 — Intelligence Layer
+# Phase 3 Research: Map Persistence & Management
 
-## LLM: Ollama on Jetson Orin Nano
-- **Capability**: Officially supported with GPU acceleration.
-- **Model Choice**: 3B models (e.g., `llama3:3b`, `phi3`) are optimal. An 8B model is possible but consumes ~5-6GB of the 8GB total, leaving little for Nav2/SLAM.
-- **Optimization**: Use `int4` or `int8` quantization. `llama.cpp` backend is used by default.
+## 1. Custom Messages Package (`aurora_msgs`)
+The `aurora_msgs` directory exists but lacks initialization (no `CMakeLists.txt` or `package.xml`). We need to:
+- Establish it as a ROS2 `ament_cmake` package.
+- Depend on `rosidl_default_generators` and `rosidl_default_runtime`.
+- Define `srv/SaveMap.srv`.
+```
+string map_name
+---
+bool success
+string message
+```
 
-## STT: Faster-Whisper
-- **Why**: 4x faster than OpenAI Whisper, optimized for C++ (CTranslate2).
-- **Quantization**: `int8` on CUDA is critical for memory.
-- **Latency**: Audio chunks of 1-3s are needed for "near real-time" feel.
+## 2. Nav2 Map Saver Integration
+Nav2 provides `nav2_map_server` and its `map_saver_cli`. The python `map_saver_node.py` will:
+- Provide a `SaveMap` service.
+- On request, format a target map name (e.g. `~/.aurora/maps/<name>`).
+- Run `ros2 run nav2_map_server map_saver_cli -f ~/.aurora/maps/<name>` as a shell command (or use the python API, but the CLI wrapper is most reliable across different Nav2 setups).
+- Auto-save on a 5-minute timer utilizing the same CLI.
 
-## Integration: LangGraph + ROS2
-- **Pattern**: `ai_bridge_node` using `asyncio`.
-- **Logic**:
-    - `asyncio` event loop running `rclpy.spin_once()` periodically.
-    - LangGraph `.ainvoke()` for stateful reasoning.
-    - ROS2 Sub: `/voice_command` (from Whisper node or audio node).
-    - ROS2 Pub: `/ai_vel` (priority 5 in `twist_mux`), `/ai_speech`.
-
-## Memory Management (8GB RAM)
-- **ZRAM**: Mandatory (4GB-8GB ZRAM).
-- **NVMe Swap**: Mandatory (8GB+).
-- **Concurrent Load**:
-    - Nav2/SLAM: ~1.2GB
-    - Ollama (3B): ~2.5GB
-    - Whisper (Base): ~0.8GB
-    - Total: ~4.5GB (well within 8GB, but headroom needed for spikes).
+## 3. RTAB-Map Persistence
+- **Default Behavior**: Right now, `mapping.launch.py` hardcodes `arguments=['-d']` which wipes the RTAB-Map DB at start.
+- **Conditional Erasure**: We will replace `arguments=['-d']` with `LaunchConfiguration('delete_db_on_start')`, resolving it dynamically:
+  ```python
+  arguments=PythonExpression(["['-d'] if '", delete_db_on_start, "' == 'true' else []"])
+  ```
+- **DB Path**: `~/.aurora/rtabmap.db` must be passed as `database_path` to the RTAB-Map node.
+- The `~/.aurora/` directory will be created if it doesn't exist.
