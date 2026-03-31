@@ -1,23 +1,35 @@
-# Phase 4 Research: OAK-D Lite on ROS 2 Humble
+# Phase 4 Research: OAK-D Spatial Object Detection
 
 ## Overview
-The goal is to integrate the OAK-D Lite (DepthAI) camera into the existing ROS 2 Humble stack on the Jetson Orin Nano. This provides Visual SLAM and Scene Understanding capabilities without overloading the CPU.
+Phase 4 focuses on moving beyond raw camera streaming to on-device object detection with 3D spatial coordinates. This leverages the Myriad X VPU on the OAK-D to perform neural network inference and depth-based positioning without stressing the Jetson Orin Nano's CPU/GPU.
 
-## 1. DepthAI ROS 2 Integration
-Luxonis provides the `depthai-ros` ecosystem natively for ROS 2 Humble.
-- **Key Package**: `depthai_ros_driver`
-- **Primary Topics**: `/camera/color/image_raw`, `/camera/stereo/depth`, and Spatial Object Bounding Boxes.
-- **Hardware Advantage**: The Jetson Orin Nano is heavily constrained to 8GB unified RAM. The OAK-D Lite features a Myriad X VPU. All depth calculations and neural network inference (like YOLOv4) run *on the camera itself*, freeing the Jetson strictly for LangGraph AI reasoning and Nav2 execution.
+## 1. Spatial Detection Pipeline
+The `depthai` API provides a dedicated node: `MobileNetSpatialDetectionNetwork` (or `YoloSpatialDetectionNetwork`).
+- **Input 1**: Color camera (640x360 or similar resolution).
+- **Input 2**: Stereo Depth (aligned to color).
+- **Output**: `SpatialImgDetections`, which includes:
+  - Bounding boxes (2D).
+  - Label ID.
+  - Confidence.
+  - **X, Y, Z coordinates** in millimeters relative to the camera center.
 
-## 2. Sensor Fusion Strategy
-- **Current Architecture**: Nav2 calculates costmaps purely from Lidar (2D) and Ultrasonics (1D).
-- **Camera Integration**: The OAK-D depth map will be published as a `PointCloud2`. Nav2's `obstacle_layer` can consume this directly via `observation_sources` to detect overhangs and 3D obstacles the 2D Lidar misses.
+## 2. Neural Network Model
+- **Choice**: `mobilenet-ssd` (requested).
+- **Source**: Can be loaded from a `.blob` file.
+- **Integration**: The blob must be compiled for the specific OpenVINO version used by the DepthAI firmware.
 
-## 3. Implementation Risks & Limits
-- **Power**: The OAK-D Lite draws heavy power over USB3. Ensure the Jetson USB ports provide stable current.
-- **Bandwidth**: Publishing raw RGB + Depth Pointclouds over ROS DDS can choke the local network. We must ensure the `depthai_ros_driver` uses intra-process communication or down-samples the pointcloud before broadcasting it to Nav2.
+## 3. ROS 2 Integration
+- **Messages**:
+  - `vision_msgs/msg/Detection2DArray` (standard for bboxes).
+  - `vision_msgs/msg/Detection3DArray` (best for spatial info).
+  - `visualization_msgs/msg/MarkerArray` (for Rviz persistent markers).
+- **Node**: Extend `camera_node.py` in `aurora_camera` to avoid duplicate driver instances.
 
-## 4. Immediate Steps
-1. Install `ros-humble-depthai-ros`.
-2. Wrap `depthai_ros_driver` in an `aurora_bringup` launch file.
-3. Setup `tf2` transformations mapping the `oak` frame to `base_link`.
+## 4. Implementation Details
+- **Sync**: Spatial detection automatically handles the depth sync if the pipeline is linked correctly.
+- **Coordinates**: The VPU returns coordinates in the camera's physical frame. We need to publish these accurately so `tf2` can transform them into the `map` or `base_link` frame in subsequent phases (Phase 5).
+- **Performance**: Running detections at 10Hz-15Hz is feasible on VPU without impacting the 10Hz RGB/Depth streams needed for SLAM.
+
+## 5. Risks
+- **Model Loading**: Need to ensure the blob is available or can be downloaded.
+- **Message Type**: Some visualization tools prefer `Detection3D` vs `Detection2D` with spatial metadata. Standardizing on `vision_msgs` is the safest bet.
