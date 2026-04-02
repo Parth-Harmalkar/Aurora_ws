@@ -18,10 +18,11 @@ class CameraNode(Node):
         self.declare_parameter('confidence_threshold', 0.5)
         self.conf_threshold = self.get_parameter('confidence_threshold').get_parameter_value().double_value
 
-        self.publisher = self.create_publisher(Image, 'camera/image_raw', 10)
-        self.depth_publisher = self.create_publisher(Image, 'camera/depth', 10)
-        self.info_publisher = self.create_publisher(CameraInfo, 'camera/camera_info', 10)
-        self.imu_publisher = self.create_publisher(Imu, 'camera/imu', 10)
+        # 2. Publishers with Industry Standard Naming
+        self.publisher = self.create_publisher(Image, 'camera/color/image_raw', 10)
+        self.depth_publisher = self.create_publisher(Image, 'camera/depth/image_raw', 10)
+        self.info_publisher = self.create_publisher(CameraInfo, 'camera/color/camera_info', 10)
+        self.imu_publisher = self.create_publisher(Imu, 'camera/imu/data', 10)
         self.det_publisher = self.create_publisher(Detection3DArray, 'camera/detections', 10)
         self.bridge = CvBridge()
 

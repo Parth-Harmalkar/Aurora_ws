@@ -1,0 +1,21 @@
+semantic_memory_node:
+  ros__parameters:
+    use_sim_time: false
+    database_path: "~/.aurora/spatial_objects.db"
+    base_frame: "base_link"
+    map_frame: "map"
+    sync_timeout: 0.1
+    min_confidence: 0.5
+    
+    # QoS Tuning
+    qos_overrides:
+      /camera/detections:
+        reliability: "reliable"
+        durability: "volatile"
+        depth: 10
+        
+status_monitor:
+  ros__parameters:
+    update_rate_hz: 1.0
+    check_tf_timeout: 0.5
+    check_topics: ["/odom", "/scan", "/camera/depth"]

@@ -15,44 +15,69 @@ class SemanticMemoryNode(Node):
     def __init__(self):
         super().__init__('semantic_memory_node')
         
-        # Parameters
-        self.declare_parameter('db_path', os.path.expanduser('~/.aurora/spatial_objects.db'))
-        self.declare_parameter('clustering_threshold', 0.5)  # meters
+        # 1. Declare Parameters (Industry standard: all params declared with defaults)
+        self.declare_parameter('database_path', os.path.expanduser('~/.aurora/spatial_objects.db'))
+        self.declare_parameter('clustering_threshold', 0.5)
+        self.declare_parameter('base_frame', 'base_link')
+        self.declare_parameter('map_frame', 'map')
+        self.declare_parameter('sync_timeout', 0.1)
         
-        self.db_path = self.get_parameter('db_path').get_parameter_value().string_value
+        self.db_path = os.path.expanduser(self.get_parameter('database_path').get_parameter_value().string_value)
         self.clustering_threshold = self.get_parameter('clustering_threshold').get_parameter_value().double_value
+        self.base_frame = self.get_parameter('base_frame').get_parameter_value().string_value
+        self.map_frame = self.get_parameter('map_frame').get_parameter_value().string_value
+        self.sync_timeout = self.get_parameter('sync_timeout').get_parameter_value().double_value
         
-        # Ensure directory exists
+        # Ensure database directory exists
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         
-        # Initialize Database
-        self.conn = sqlite3.connect(self.db_path)
+        # 2. Database Connection
+        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self.init_db()
         
-        # TF Buffer and Listener
+        # 3. TF Buffer and Listener
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
         
-        # Subscriber
+        # 4. QoS Tuning (Industry standard: explicit profiles for vision-heavy topics)
+        detection_qos = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            depth=10
+        )
+        
+        # 5. Subscriber
         self.subscription = self.create_subscription(
             Detection3DArray,
             '/camera/detections',
             self.detection_callback,
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE)
+            detection_qos
         )
         
-        # Services
+        # 6. Services
         self.srv_get = self.create_service(GetObjectPose, 'get_object_pose', self.get_object_pose_callback)
         self.srv_query = self.create_service(QueryObject, 'query_object', self.query_object_callback)
         self.srv_list = self.create_service(ListObjects, 'list_objects', self.list_objects_callback)
         
-        # Marker Publisher
+        # 7. Marker Publisher (Visualization)
         self.marker_pub = self.create_publisher(MarkerArray, '/semantic_map', 10)
         
-        # Timer for visualization (1Hz)
+        # 8. Timers for visualization and garbage collection
         self.create_timer(1.0, self.publish_markers)
+        self.create_timer(5.0, self.garbage_collection)
         
-        self.get_logger().info(f"Semantic Memory Node started. DB: {self.db_path}")
+        self.get_logger().info(f"Semantic Memory Node [INDUSTRIAL] started. DB: {self.db_path}")
+
+    def garbage_collection(self):
+        cursor = self.conn.cursor()
+        current_time = self.get_clock().now().nanoseconds / 1e9
+        cursor.execute('''
+            DELETE FROM objects 
+            WHERE (? - timestamp) > 15 AND hit_count < 3
+        ''', (current_time,))
+        deleted = cursor.rowcount
+        if deleted > 0:
+            self.get_logger().info(f"Garbage collected {deleted} unconfirmed ghost objects.")
+        self.conn.commit()
 
     def init_db(self):
         cursor = self.conn.cursor()
@@ -64,7 +89,8 @@ class SemanticMemoryNode(Node):
                 y REAL NOT NULL,
                 z REAL NOT NULL,
                 confidence REAL NOT NULL,
-                timestamp REAL NOT NULL
+                timestamp REAL NOT NULL,
+                hit_count INTEGER NOT NULL DEFAULT 1
             )
         ''')
         self.conn.commit()
@@ -84,7 +110,7 @@ class SemanticMemoryNode(Node):
                     'map', 
                     msg.header.frame_id, 
                     msg.header.stamp,
-                    rclpy.duration.Duration(seconds=0.1) # Shorter initial wait
+                    rclpy.duration.Duration(seconds=0.3) # Increased for lag resilience
                 )
             except (tf2_ros.LookupException, tf2_ros.ExtrapolationException, tf2_ros.ConnectivityException):
                 try:
@@ -140,22 +166,23 @@ class SemanticMemoryNode(Node):
                     y = (1-?) * y + ? * ?,
                     z = (1-?) * z + ? * ?,
                     confidence = ?,
-                    timestamp = ?
+                    timestamp = ?,
+                    hit_count = hit_count + 1
                 WHERE id = ?
             ''', (alpha, alpha, point.x, alpha, alpha, point.y, alpha, alpha, point.z, 
                   confidence, self.get_clock().now().nanoseconds / 1e9, match_id))
         else:
             # Insert new
             cursor.execute('''
-                INSERT INTO objects (label, x, y, z, confidence, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO objects (label, x, y, z, confidence, timestamp, hit_count)
+                VALUES (?, ?, ?, ?, ?, ?, 1)
             ''', (label, point.x, point.y, point.z, confidence, self.get_clock().now().nanoseconds / 1e9))
             
         self.conn.commit()
 
     def get_object_pose_callback(self, request, response):
         cursor = self.conn.cursor()
-        cursor.execute("SELECT x, y, z FROM objects WHERE label = ? ORDER BY confidence DESC LIMIT 1", (request.label,))
+        cursor.execute("SELECT x, y, z FROM objects WHERE label = ? AND hit_count >= 3 ORDER BY confidence DESC LIMIT 1", (request.label,))
         row = cursor.fetchone()
         
         if row:
@@ -183,6 +210,7 @@ class SemanticMemoryNode(Node):
         cursor.execute('''
             SELECT label, x, y, z 
             FROM objects 
+            WHERE hit_count >= 3
             GROUP BY label 
             ORDER BY confidence DESC
         ''')
@@ -209,7 +237,7 @@ class SemanticMemoryNode(Node):
 
     def publish_markers(self):
         cursor = self.conn.cursor()
-        cursor.execute("SELECT id, label, x, y, z FROM objects")
+        cursor.execute("SELECT id, label, x, y, z FROM objects WHERE hit_count >= 3")
         rows = cursor.fetchall()
         
         marker_array = MarkerArray()

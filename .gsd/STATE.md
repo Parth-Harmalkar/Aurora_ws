@@ -1,9 +1,9 @@
 # Project State
 
 ## Current Position
-- **Phase**: 5
-- **Task**: Planning complete
-- **Status**: Ready for execution
+- **Phase**: 6
+- **Task**: Autonomous Frontier Exploration
+- **Status**: Ready for planning
 
 ## Next Steps
-1. /execute 5
+1. /plan 6

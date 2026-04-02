@@ -15,11 +15,11 @@ class MapSaverNode(Node):
         # Provide the SaveMap service
         self.srv = self.create_service(SaveMap, 'save_map', self.save_map_callback)
         
-        # Auto-save timer (5 minutes = 300 seconds)
-        self.timer_period = 300.0  
+        # Auto-save timer (1 minute = 60 seconds)
+        self.timer_period = 60.0  
         self.timer = self.create_timer(self.timer_period, self.auto_save_callback)
         
-        self.get_logger().info('Map Saver Node initialized. Auto-saving every 5 minutes.')
+        self.get_logger().info('Map Saver Node initialized. Auto-saving every 1 minute.')
 
     def save_map(self, map_name):
         map_path = os.path.join(self.maps_dir, map_name)
@@ -43,8 +43,8 @@ class MapSaverNode(Node):
         return response
 
     def auto_save_callback(self):
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        map_name = f'auto_map_{timestamp}'
+        # Overwrite the same 'auto_map' file every time instead of spamming timestamps
+        map_name = 'auto_map'
         self.save_map(map_name)
 
 def main(args=None):

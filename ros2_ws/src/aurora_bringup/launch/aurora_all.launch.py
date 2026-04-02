@@ -24,28 +24,43 @@ def generate_launch_description():
         description='If true, offload AI tasks to remote laptop.'
     )
 
-    # 1. Mapping Launch
+    enable_voice = LaunchConfiguration('enable_voice')
+    declare_enable_voice = DeclareLaunchArgument(
+        'enable_voice',
+        default_value='false',
+        description='If true, enable Whisper voice transcription (CPU heavy).'
+    )
+
+    delete_db_on_start = LaunchConfiguration('delete_db_on_start')
+    declare_delete_db = DeclareLaunchArgument(
+        'delete_db_on_start',
+        default_value='false',
+        description='Erase the RTAB-Map DB at startup.'
+    )
+
+    # 1. Mapping & SLAM Launch
     mapping_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_bringup, 'launch', 'mapping.launch.py')
         ),
-        launch_arguments={'use_tui': use_tui}.items()
+        launch_arguments={
+            'use_tui': use_tui,
+            'delete_db_on_start': delete_db_on_start
+        }.items()
     )
     
-    # 2. Intelligence Launch
+    # 2. Intelligence Launch (AI and Memory)
     intelligence_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_bringup, 'launch', 'intelligence.launch.py')
         ),
         launch_arguments={
             'use_tui': use_tui,
-            'remote_ai': remote_ai
+            'remote_ai': remote_ai,
+            'enable_voice': enable_voice
         }.items()
     )
     
-    # 3. Vision Launch (Managed by foundation)
-
-    # 4. TUI Dashboard
     # 4. TUI Dashboard
     tui_node = Node(
         package='aurora_ai_bridge',
@@ -59,6 +74,8 @@ def generate_launch_description():
     return LaunchDescription([
         declare_use_tui,
         declare_remote_ai,
+        declare_enable_voice,
+        declare_delete_db,
         mapping_launch,
         intelligence_launch,
         tui_node
