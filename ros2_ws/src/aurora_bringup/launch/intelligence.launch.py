@@ -35,5 +35,13 @@ def generate_launch_description():
             executable='status_monitor',
             name='status_monitor',
             output=PythonExpression(["'log' if '", use_tui, "' == 'true' else 'screen'"])
+        ),
+        
+        # 4. Semantic Memory Node (Persistent object memory)
+        Node(
+            package='aurora_semantic_memory',
+            executable='semantic_memory_node',
+            name='semantic_memory',
+            output=PythonExpression(["'log' if '", use_tui, "' == 'true' else 'screen'"])
         )
     ])

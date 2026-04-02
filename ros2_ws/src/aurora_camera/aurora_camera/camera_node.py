@@ -2,7 +2,10 @@ import depthai as dai
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image, CameraInfo, Imu
+from vision_msgs.msg import Detection3DArray, Detection3D, ObjectHypothesisWithPose
 from cv_bridge import CvBridge
+from ament_index_python.packages import get_package_share_directory
+import os
 import cv2
 import numpy as np
 
@@ -10,11 +13,23 @@ class CameraNode(Node):
 
     def __init__(self):
         super().__init__('camera_node')
+        
+        # Declare Parameters
+        self.declare_parameter('confidence_threshold', 0.5)
+        self.conf_threshold = self.get_parameter('confidence_threshold').get_parameter_value().double_value
+
         self.publisher = self.create_publisher(Image, 'camera/image_raw', 10)
         self.depth_publisher = self.create_publisher(Image, 'camera/depth', 10)
         self.info_publisher = self.create_publisher(CameraInfo, 'camera/camera_info', 10)
         self.imu_publisher = self.create_publisher(Imu, 'camera/imu', 10)
+        self.det_publisher = self.create_publisher(Detection3DArray, 'camera/detections', 10)
         self.bridge = CvBridge()
+
+        # MobileNet-SSD Label Map (21 classes for PASCAL VOC)
+        self.labels = [
+            "background", "aeroplane", "bicycle", "bird", "boat", "bottle", "bus", "car", "cat", "chair",
+            "cow", "diningtable", "dog", "horse", "motorbike", "person", "pottedplant", "sheep", "sofa", "train", "tvmonitor"
+        ]
 
         # Target resolution for both RGB and depth (must match for RTAB-Map)
         self.target_width = 640
@@ -30,6 +45,9 @@ class CameraNode(Node):
         cam_rgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1080_P)
         cam_rgb.setIspScale(1, 3) # 1920x1080 -> 640x360 (Good balance for 3D mapping)
         cam_rgb.setFps(10) # Lower FPS to keep Jetson CPU manageable at higher res
+        cam_rgb.setPreviewKeepAspectRatio(False)
+        cam_rgb.setPreviewSize(300, 300) # Required for MobileNet-SSD
+        cam_rgb.setInterleaved(False) # Optimization: NN expects planar (CHW) data
 
         # Stereo Depth
         mono_left = self.pipeline.create(dai.node.MonoCamera)
@@ -49,6 +67,28 @@ class CameraNode(Node):
 
         mono_left.out.link(stereo.left)
         mono_right.out.link(stereo.right)
+
+        # Spatial Detection Network
+        spatial_nn = self.pipeline.create(dai.node.MobileNetSpatialDetectionNetwork)
+        # We will attempt to load the blob from our package's share directory
+        try:
+            package_share = get_package_share_directory('aurora_camera')
+            model_path = os.path.join(package_share, 'models', 'mobilenet-ssd_openvino_2021.4_6shave.blob')
+            spatial_nn.setBlobPath(model_path)
+            self.get_logger().info(f"Loaded MobileNet-SSD blob from: {model_path}")
+        except Exception as e:
+            self.get_logger().error(f"Failed to load MobileNet-SSD blob: {e}")
+            # We don't return here so the node still streams images, but detection will fail
+        
+        spatial_nn.setConfidenceThreshold(self.conf_threshold)
+        spatial_nn.input.setBlocking(False)
+        spatial_nn.setBoundingBoxScaleFactor(0.5)
+        spatial_nn.setDepthLowerThreshold(100)
+        spatial_nn.setDepthUpperThreshold(5000)
+
+        # Links
+        cam_rgb.preview.link(spatial_nn.input)
+        stereo.depth.link(spatial_nn.inputDepth)
 
         # IMU (BMI270)
         imu = self.pipeline.create(dai.node.IMU)
@@ -70,21 +110,27 @@ class CameraNode(Node):
         xout_imu.setStreamName("imu")
         imu.out.link(xout_imu.input)
 
+        xout_nn = self.pipeline.create(dai.node.XLinkOut)
+        xout_nn.setStreamName("det")
+        spatial_nn.out.link(xout_nn.input)
+
         # Device connection
         try:
             self.device = dai.Device(self.pipeline)
             self.rgb_queue = self.device.getOutputQueue(name="rgb", maxSize=4, blocking=False)
             self.depth_queue = self.device.getOutputQueue(name="depth", maxSize=4, blocking=False)
             self.imu_queue = self.device.getOutputQueue(name="imu", maxSize=10, blocking=False)
+            self.det_queue = self.device.getOutputQueue(name="det", maxSize=4, blocking=False)
             
             # OAK-D Pro specific: Enable IR Dot Projector (Intensity: 0.0 to 1.0)
-            try:
-                self.device.setIrLaserDotProjectorIntensity(0.5)
-                self.get_logger().info("Oak-D Pro: IR Dot Projector enabled (Intensity: 0.5)")
-            except Exception as e:
-                self.get_logger().warn(f"Failed to enable IR Projector (might be a non-Pro model): {e}")
+            # Commenting out as some DepthAI versions use different method names or aren't detecting the Pro model correctly
+            # try:
+            #     self.device.setIrLaserDotProjectorIntensity(0.5)
+            #     self.get_logger().info("Oak-D Pro: IR Dot Projector enabled (Intensity: 0.5)")
+            # except Exception as e:
+            #     self.get_logger().warn(f"Failed to enable IR Projector (might be a non-Pro model): {e}")
 
-            self.get_logger().info("Oak-D Pro Camera (IMU initialized) ready.")
+            self.get_logger().info("Oak-D Pro Camera (IMU + Detection initialized) ready.")
         except Exception as e:
             self.get_logger().error(f"Failed to initialize Oak-D Pro: {e}")
             self.device = None
@@ -99,7 +145,7 @@ class CameraNode(Node):
             self.target_width, self.target_height, self.intrinsics
         )
 
-        self.timer = self.create_timer(0.05, self.timer_callback)  # 20Hz
+        self.timer = self.create_timer(0.1, self.timer_callback)  # 10Hz (Freshness Optimized)
 
     def build_camera_info(self, width, height, intrinsics):
         info = CameraInfo()
@@ -128,10 +174,49 @@ class CameraNode(Node):
         if self.device is None:
             return
 
-        in_rgb = self.rgb_queue.tryGet()
-        in_depth = self.depth_queue.tryGet()
+        # Freshness Check: Drain all old frames
+        in_rgb = None
+        while True:
+            tmp = self.rgb_queue.tryGet()
+            if tmp is None: break
+            in_rgb = tmp
+        in_depth = None
+        while True:
+            tmp = self.depth_queue.tryGet()
+            if tmp is None: break
+            in_depth = tmp
+        in_det = None
+        while True:
+            tmp = self.det_queue.tryGet()
+            if tmp is None: break
+            in_det = tmp
 
         now = self.get_clock().now().to_msg()
+
+        if in_det is not None:
+            detections = in_det.detections
+            msg = Detection3DArray()
+            msg.header.stamp = now
+            msg.header.frame_id = "camera_optical_frame"
+            
+            for det in detections:
+                d3d = Detection3D()
+                
+                # Spatial coordinates (translated from mm to meters)
+                # OAK-D uses: X-right, Y-down, Z-forward (matching optical frame)
+                d3d.bbox.center.position.x = det.spatialCoordinates.x / 1000.0
+                d3d.bbox.center.position.y = det.spatialCoordinates.y / 1000.0
+                d3d.bbox.center.position.z = det.spatialCoordinates.z / 1000.0
+                
+                hyp = ObjectHypothesisWithPose()
+                label_id = int(det.label)
+                hyp.hypothesis.class_id = self.labels[label_id] if label_id < len(self.labels) else str(label_id)
+                hyp.hypothesis.score = float(det.confidence)
+                
+                d3d.results.append(hyp)
+                msg.detections.append(d3d)
+            
+            self.det_publisher.publish(msg)
 
         if in_rgb is not None:
             frame = in_rgb.getCvFrame()
@@ -204,8 +289,10 @@ def main(args=None):
     finally:
         if node.device:
             node.device.close()
-        node.destroy_node()
-        rclpy.shutdown()
+        # Avoid potential double-shutdown error if rclpy was already shut down
+        if rclpy.ok():
+            node.destroy_node()
+            rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

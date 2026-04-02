@@ -144,7 +144,7 @@ def generate_launch_description():
             executable='static_transform_publisher',
             name='base_link_to_camera',
             output=output_cfg,
-            arguments=['0.1', '0', '0.1', '0', '0', '0', 'base_link', 'camera_link']
+            arguments=['0.1', '0', '0.2', '0', '0', '0', 'base_link', 'camera_link']
         ),
         # Camera optical frame: rotates from ROS convention (X-fwd, Y-left, Z-up)
         # to optical convention (X-right, Y-down, Z-forward) for RTAB-Map/vision

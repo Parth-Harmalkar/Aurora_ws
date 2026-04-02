@@ -179,8 +179,9 @@ def main(args=None):
     finally:
         if node.bus is not None:
             node.bus.close()
-        node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            node.destroy_node()
+            rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

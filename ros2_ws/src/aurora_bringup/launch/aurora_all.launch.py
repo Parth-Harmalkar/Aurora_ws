@@ -43,22 +43,9 @@ def generate_launch_description():
         }.items()
     )
     
-    # 3. Vision Launch
-    camera_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(pkg_bringup, 'launch', 'camera.launch.py')
-        ),
-        launch_arguments={'use_tui': use_tui}.items()
-    )
+    # 3. Vision Launch (Managed by foundation)
 
-    camera_tf = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='base_link_to_camera',
-        arguments=['0.10', '0', '0.20', '0', '0', '0', 'base_link', 'camera_link'],
-        output=PythonExpression(["'log' if '", use_tui, "' == 'true' else 'screen'"])
-    )
-    
+    # 4. TUI Dashboard
     # 4. TUI Dashboard
     tui_node = Node(
         package='aurora_ai_bridge',
@@ -74,7 +61,5 @@ def generate_launch_description():
         declare_remote_ai,
         mapping_launch,
         intelligence_launch,
-        camera_launch,
-        camera_tf,
         tui_node
     ])

@@ -12,7 +12,6 @@
 /ros2_ws/install/
 /ros2_ws/log/
 
-
 # IDE & Editor
 .vscode/
 .idea/
