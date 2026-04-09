@@ -22,6 +22,7 @@ class CameraNode(Node):
         self.publisher = self.create_publisher(Image, 'camera/color/image_raw', 10)
         self.depth_publisher = self.create_publisher(Image, 'camera/depth/image_raw', 10)
         self.info_publisher = self.create_publisher(CameraInfo, 'camera/color/camera_info', 10)
+        self.depth_info_publisher = self.create_publisher(CameraInfo, 'camera/depth/camera_info', 10)
         self.imu_publisher = self.create_publisher(Imu, 'camera/imu/data', 10)
         self.det_publisher = self.create_publisher(Detection3DArray, 'camera/detections', 10)
         self.bridge = CvBridge()
@@ -253,6 +254,10 @@ class CameraNode(Node):
             msg.header.stamp = now
             msg.header.frame_id = "camera_optical_frame"
             self.depth_publisher.publish(msg)
+            
+            # Publish matching CameraInfo for depth
+            self.camera_info_msg.header = msg.header
+            self.depth_info_publisher.publish(self.camera_info_msg)
 
         # Process IMU
         imu_data = self.imu_queue.tryGet()

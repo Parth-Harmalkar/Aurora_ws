@@ -1,6 +1,7 @@
 from setuptools import find_packages, setup
 from ament_index_python.packages import get_package_share_directory
 import os
+from glob import glob
 
 package_name = 'aurora_camera'
 
@@ -12,6 +13,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        (os.path.join('share', package_name, 'launch'), glob(os.path.join('launch', '*.launch.py'))),
         (os.path.join('share', package_name, 'models'), ['models/mobilenet-ssd_openvino_2021.4_6shave.blob']),
     ],
     install_requires=['setuptools'],
