@@ -22,28 +22,45 @@ class FailsafeStopNode(Node):
         self.stop_pub = self.create_publisher(Twist, '/stop_vel', 10)
         
         self.stop_triggered = False
-        self.get_logger().info("Failsafe Stop Layer Initialized")
+        self.last_stop_time = 0
+        self.get_logger().info("Failsafe Stop Layer Initialized (V2: Auto-Recovery Enabled)")
 
     def us_callback(self, msg):
-        if msg.range < 0.15: # Critical ultrasonic threshold
-            self.trigger_stop("Ultrasonic Critical")
+        # Increased threshold to 0.20 to be safer against shiny tile reflections
+        if msg.range < 0.20: 
+            self.trigger_stop(f"Ultrasonic Critical at {msg.range:.2f}m")
 
     def scan_callback(self, msg):
-        # Check front arc (340 to 20 degrees)
-        CHASSIS_LIMIT = 0.28
+        # Lidar is at center. robot_radius is 0.22. 
+        # Anything < 0.25 is likely the robot itself or too close.
+        CHASSIS_LIMIT = 0.25 
+        STOP_THRESHOLD = 0.35 # Stop if object is between 25cm and 35cm
+        
         ranges = msg.ranges
         num_ranges = len(ranges)
         
-        # Front 45 degree arc
+        # Front 45 degree arc (337.5 to 22.5)
         indices = list(range(int(num_ranges * 337.5 / 360), num_ranges)) + list(range(0, int(num_ranges * 22.5 / 360)))
         
+        collision_detected = False
         for i in indices:
             r = ranges[i]
-            if r > CHASSIS_LIMIT and r < 0.20: # 20cm hard safety
+            if r > CHASSIS_LIMIT and r < STOP_THRESHOLD:
                 self.trigger_stop(f"Lidar Critical at {r:.2f}m")
-                return
+                collision_detected = True
+                break
+        
+        # Auto-reset: if no collision detected in this scan, and it's been > 2s since last check
+        if not collision_detected and self.stop_triggered:
+             current_time = self.get_clock().now().nanoseconds / 1e9
+             if current_time - self.last_stop_time > 2.0:
+                 self.get_logger().info("✅ Failsafe Cleared: Path is now open.")
+                 self.stop_triggered = False
 
     def trigger_stop(self, reason):
+        current_time = self.get_clock().now().nanoseconds / 1e9
+        self.last_stop_time = current_time
+        
         if not self.stop_triggered:
             self.get_logger().warn(f"🛑 FAILSAFE TRIGGERED: {reason}")
             self.stop_triggered = True

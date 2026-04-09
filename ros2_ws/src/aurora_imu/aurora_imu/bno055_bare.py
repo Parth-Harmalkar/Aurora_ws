@@ -117,10 +117,10 @@ class BNO055BareNode(Node):
             quat_data = self.bus.read_i2c_block_data(self.i2c_addr, self.BNO055_QUATERNION_DATA_W_LSB_ADDR, 8)
             q_w, q_x, q_y, q_z = struct.unpack('<hhhh', bytes(quat_data))
             
-            # Invert Pitch (Y) and Roll (X) direction of rotation manually 
+            # Directly pass hardware quaternions to ROS (in BNO055 native frame)
             msg.orientation.w = q_w / 16384.0
-            msg.orientation.x = -q_x / 16384.0
-            msg.orientation.y = -q_y / 16384.0
+            msg.orientation.x = q_x / 16384.0
+            msg.orientation.y = q_y / 16384.0
             msg.orientation.z = q_z / 16384.0
             
             # Safety fallback if hardware returns all 0s (prevents RTAB-Map rejection)
@@ -132,9 +132,9 @@ class BNO055BareNode(Node):
             g_x, g_y, g_z = struct.unpack('<hhh', bytes(gyro_data))
             
             deg2rad = math.pi / 180.0
-            # Also mathematically invert the angular velocity for Pitch and Roll
-            msg.angular_velocity.x = -(g_x / 16.0) * deg2rad
-            msg.angular_velocity.y = -(g_y / 16.0) * deg2rad
+            # Raw angular velocities (rad/s)
+            msg.angular_velocity.x = (g_x / 16.0) * deg2rad
+            msg.angular_velocity.y = (g_y / 16.0) * deg2rad
             msg.angular_velocity.z = (g_z / 16.0) * deg2rad
 
             # --- Read Linear Acceleration (Gravity-compensated) (6 bytes at 0x28) ---

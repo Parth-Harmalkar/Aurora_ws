@@ -76,7 +76,7 @@ private:
             return;
         }
         int64_t leftTicks = msg->data - lastCountL;
-        distanceLeft = static_cast<double>(leftTicks) / TICKS_PER_METER;
+        distanceLeft += static_cast<double>(leftTicks) / TICKS_PER_METER;
         lastCountL = msg->data;
     }
     
@@ -88,7 +88,7 @@ private:
             return;
         }
         int64_t rightTicks = msg->data - lastCountR;
-        distanceRight = static_cast<double>(rightTicks) / TICKS_PER_METER;
+        distanceRight += static_cast<double>(rightTicks) / TICKS_PER_METER;
         lastCountR = msg->data;
     }
     
@@ -144,6 +144,17 @@ private:
         
         odom_msg.twist.twist.linear.x = linear_velocity;
         odom_msg.twist.twist.angular.z = angular_velocity;
+        
+        // Add basic covariances to satisfy robot_localization EKF
+        // Pose covariance
+        odom_msg.pose.covariance[0] = 0.01;   // x
+        odom_msg.pose.covariance[7] = 0.01;   // y
+        odom_msg.pose.covariance[35] = 0.05;  // yaw
+        
+        // Twist covariance
+        odom_msg.twist.covariance[0] = 0.05;  // vx
+        odom_msg.twist.covariance[7] = 0.05;  // vy
+        odom_msg.twist.covariance[35] = 0.05; // vyaw
         
         odom_pub_->publish(odom_msg);
     }

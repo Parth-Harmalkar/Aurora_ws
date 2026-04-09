@@ -203,6 +203,10 @@ class CameraNode(Node):
             for det in detections:
                 d3d = Detection3D()
                 
+                # Filter out invalid depth measurements (where OAK-D returns 0.0 when out of range or ROI fails)
+                if det.spatialCoordinates.z == 0.0:
+                    continue
+                    
                 # Spatial coordinates (translated from mm to meters)
                 # OAK-D uses: X-right, Y-down, Z-forward (matching optical frame)
                 d3d.bbox.center.position.x = det.spatialCoordinates.x / 1000.0

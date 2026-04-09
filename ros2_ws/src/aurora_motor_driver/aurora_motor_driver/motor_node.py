@@ -37,6 +37,10 @@ class MotorDriverNode(Node):
         self.baudrate = self.get_parameter('baudrate').get_parameter_value().integer_value
         self.wheel_sep = self.get_parameter('wheel_sep').get_parameter_value().double_value
         self.motor_acc = self.get_parameter('motor_acc').get_parameter_value().integer_value
+        
+        # Command Heartbeat Tracking
+        self.last_cmd_time = self.get_clock().now()
+        self.cmd_warning_logged = False
 
         # Encoder Tracking Variables (from Arjuna_Ticks_Pub.py)
         self.total_left_ticks = 0
@@ -76,11 +80,13 @@ class MotorDriverNode(Node):
     def listener_callback(self, msg):
         linear_vel = msg.linear.x
         angular_vel = msg.angular.z
-        
-        # Only log non-zero commands at INFO
-        # if abs(linear_vel) > 0.001 or abs(angular_vel) > 0.001:
-        #    self.get_logger().info(f"Command received: lx={linear_vel:.2f}, az={angular_vel:.2f}")
- 
+
+        # Update Heartbeat
+        self.last_cmd_time = self.get_clock().now()
+        if self.cmd_warning_logged:
+            self.get_logger().info("Control commands resumed.")
+            self.cmd_warning_logged = False
+
         # Differential drive kinematics
         self.right_velocity_cmd = ((linear_vel * 2) + (angular_vel * self.wheel_sep)) / 2.0
         self.left_velocity_cmd = ((linear_vel * 2) - (angular_vel * self.wheel_sep)) / 2.0
@@ -148,6 +154,17 @@ class MotorDriverNode(Node):
         except Exception as e:
             self.get_logger().warn(f"Tick update error: {e}")
             return
+            
+        # Check command heartbeat: if > 2.0s without cmd_vel, log warning
+        now = self.get_clock().now()
+        time_diff = (now - self.last_cmd_time).nanoseconds / 1e9
+        if time_diff > 2.0 and not self.cmd_warning_logged:
+            self.get_logger().error(f"FATAL: Control heartbeat lost for {time_diff:.1f}s! Check twist_mux or teleop.")
+            self.cmd_warning_logged = True
+            # Set target speeds to zero for safety if heartbeat lost
+            self.left_speed = 0
+            self.right_speed = 0
+
         # Write speeds to motors
         try:
             # Left (IDs 1,4)
