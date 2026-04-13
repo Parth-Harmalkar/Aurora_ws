@@ -27,7 +27,7 @@ def generate_launch_description():
             ('/depth/camera_info', '/camera/color/camera_info'),
             ('/scan', '/scan'),
             ('/odom', '/odom'),
-            ('/imu', '/camera/imu/data'),
+            ('/imu', '/imu/data'),
             ('/grid_map', '/map')
         ],
         arguments=['-d'] if delete_db_on_start == 'true' else []

@@ -50,14 +50,23 @@ def generate_launch_description():
             parameters=[{'publish_tf': False}] # robot_localization handles TF
         ),
 
-        # 3. Dedicated Hardware IMU Node (BNO055 Bare-Metal Driver)
+        # 3. Dedicated Hardware IMU Node (BNO055 Bare-Metal Driver - C++ Port)
         Node(
             package='aurora_imu',
             executable='bno055_bare',
             name='bno_imu_node',
             output=output_cfg,
+            parameters=[{
+                'i2c_bus': 1,
+                'i2c_addr': 0x28,
+                'frame_id': 'bno_link',
+                # Direction is correct (Red=Front), but Roll/Pitch are inverted.
+                # Inverting signs to align with Right-Hand Rule.
+                'axis_x': 0, 'axis_y': 1, 'axis_z': 2,
+                'sign_x': 1, 'sign_y': 1, 'sign_z': 1
+            }],
             remappings=[
-                ('/bno055_raw', '/imu/data')
+                ('/imu/data', '/imu/data') # Native topic in C++ version
             ]
         ),
 
@@ -136,7 +145,7 @@ def generate_launch_description():
             executable='static_transform_publisher',
             name='base_link_to_imu',
             output=output_cfg,
-            # IMU physical transform offset against the robot centroid (User can adjust this if needed)
+            # Reset to identity as correction is now hardcoded in the C++ driver
             arguments=['0', '0', '0', '0', '0', '0', 'base_link', 'bno_link']
         ),
         Node(
