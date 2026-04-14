@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(aurora_imu)
+project(aurora_imu_cpp)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -15,14 +15,6 @@ ament_target_dependencies(bno055_bare rclcpp sensor_msgs)
 
 install(TARGETS
   bno055_bare
-  DESTINATION lib/${PROJECT_NAME}
-)
-
-# Install Python scripts as well for backward compatibility
-install(
-  PROGRAMS
-  aurora_imu/bno055_bare.py
-  aurora_imu/imu_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

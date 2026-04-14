@@ -23,18 +23,31 @@ class FailsafeStopNode(Node):
         
         self.stop_triggered = False
         self.last_stop_time = 0
-        self.get_logger().info("Failsafe Stop Layer Initialized (V2: Auto-Recovery Enabled)")
+        
+        # Filtering for US sensors
+        self.us_hits = {'front_left': 0, 'front_right': 0}
+        self.MIN_HITS = 3
+        self.US_THRESHOLD = 0.15 # 15cm (tuned to be safer against floor noise)
+        
+        self.get_logger().info("Failsafe Stop Layer Initialized (V2: Robust Filtering Enabled)")
 
     def us_callback(self, msg):
-        # Increased threshold to 0.20 to be safer against shiny tile reflections
-        if msg.range < 0.20: 
-            self.trigger_stop(f"Ultrasonic Critical at {msg.range:.2f}m")
+        frame = msg.header.frame_id
+        side = 'front_left' if 'left' in frame else 'front_right'
+        
+        if msg.range < self.US_THRESHOLD:
+            self.us_hits[side] += 1
+        else:
+            self.us_hits[side] = 0 # Reset on any clear reading for safety
+            
+        if self.us_hits[side] >= self.MIN_HITS:
+            self.trigger_stop(f"Ultrasonic Critical at {msg.range:.2f}m ({side})")
 
     def scan_callback(self, msg):
         # Lidar is at center. robot_radius is 0.22. 
-        # Anything < 0.25 is likely the robot itself or too close.
-        CHASSIS_LIMIT = 0.25 
-        STOP_THRESHOLD = 0.35 # Stop if object is between 25cm and 35cm
+        # Anything < 0.20 is likely the robot itself or too close.
+        CHASSIS_LIMIT = 0.20 
+        STOP_THRESHOLD = 0.25 # Stop only for TRUE imminent collision (20-25cm)
         
         ranges = msg.ranges
         num_ranges = len(ranges)
@@ -50,10 +63,13 @@ class FailsafeStopNode(Node):
                 collision_detected = True
                 break
         
-        # Auto-reset: if no collision detected in this scan, and it's been > 2s since last check
-        if not collision_detected and self.stop_triggered:
+        # Check if US sensors are also clear for auto-reset
+        us_clear = all(h == 0 for h in self.us_hits.values())
+        
+        # Auto-reset: if no collision detected, and it's been > 1s since last check
+        if not collision_detected and us_clear and self.stop_triggered:
              current_time = self.get_clock().now().nanoseconds / 1e9
-             if current_time - self.last_stop_time > 2.0:
+             if current_time - self.last_stop_time > 1.0:
                  self.get_logger().info("✅ Failsafe Cleared: Path is now open.")
                  self.stop_triggered = False
 
@@ -64,6 +80,8 @@ class FailsafeStopNode(Node):
         if not self.stop_triggered:
             self.get_logger().warn(f"🛑 FAILSAFE TRIGGERED: {reason}")
             self.stop_triggered = True
+        else:
+            self.get_logger().debug(f"🛑 FAILSAFE ACTIVE: {reason}")
             
         t = Twist() # Zero velocity
         self.stop_pub.publish(t)

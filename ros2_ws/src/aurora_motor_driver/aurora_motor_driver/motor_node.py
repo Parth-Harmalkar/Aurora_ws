@@ -159,9 +159,11 @@ class MotorDriverNode(Node):
         now = self.get_clock().now()
         time_diff = (now - self.last_cmd_time).nanoseconds / 1e9
         if time_diff > 2.0 and not self.cmd_warning_logged:
-            self.get_logger().error(f"FATAL: Control heartbeat lost for {time_diff:.1f}s! Check twist_mux or teleop.")
+            # Only log if we were actually receiving commands before (to avoid noise at startup)
+            if self.last_cmd_time.nanoseconds > 0:
+                self.get_logger().warn(f"Control heartbeat idle for {time_diff:.1f}s. Waiting for commands...")
             self.cmd_warning_logged = True
-            # Set target speeds to zero for safety if heartbeat lost
+            # Set target speeds to zero for safety
             self.left_speed = 0
             self.right_speed = 0
 

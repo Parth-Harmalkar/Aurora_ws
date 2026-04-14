@@ -147,7 +147,7 @@ class CameraNode(Node):
             self.target_width, self.target_height, self.intrinsics
         )
 
-        self.timer = self.create_timer(0.1, self.timer_callback)  # 10Hz (Freshness Optimized)
+        self.timer = self.create_timer(0.2, self.timer_callback)  # 5Hz (CPU Optimized for Jetson)
 
     def build_camera_info(self, width, height, intrinsics):
         info = CameraInfo()

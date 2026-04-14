@@ -14,7 +14,7 @@
   <depend>aurora_motor_driver</depend>
   <depend>aurora_odometry</depend>
   <depend>sllidar_ros2</depend>
-  <depend>aurora_imu</depend>
+  <depend>aurora_imu_cpp</depend>
   <exec_depend>depthai_ros_driver</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>

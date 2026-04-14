@@ -22,6 +22,12 @@ class UltrasonicNode(Node):
             self.bus = None
 
         self.timer = self.create_timer(0.1, self.read_sensor)
+        
+        # Filtering state
+        self.MIN_HITS = 3
+        self.us_data = [2.0, 2.0] # Current published values
+        self.us_counters = [0, 0] # Counters for stable readings
+        self.last_raw = [2.0, 2.0] # Last raw readings seen
 
     def read_sensor(self):
         if self.bus is None:
@@ -29,21 +35,36 @@ class UltrasonicNode(Node):
 
         try:
             # Reading from indices 0 and 1 for the 2 sensors (values in cm)
-            d1 = self.bus.read_byte_data(self.addr, 0)
-            d2 = self.bus.read_byte_data(self.addr, 1)
+            raw_cm = [
+                self.bus.read_byte_data(self.addr, 0),
+                self.bus.read_byte_data(self.addr, 1)
+            ]
+            
+            for i in range(2):
+                val_m = float(raw_cm[i]) / 100.0
+                
+                # If reading is similar to last raw, increment stable counter
+                # Using a 5cm tolerance for 'stable'
+                if abs(val_m - self.last_raw[i]) < 0.05:
+                    self.us_counters[i] += 1
+                else:
+                    self.us_counters[i] = 0
+                    self.last_raw[i] = val_m
+                
+                # Update published data only if stable for N hits
+                if self.us_counters[i] >= self.MIN_HITS:
+                    self.us_data[i] = val_m
             
             # Publish Front Left
-            range_msg_left = self.create_range_msg('ultrasonic_front_left', d1)
-            self.pub_left.publish(range_msg_left)
+            self.pub_left.publish(self.create_range_msg('ultrasonic_front_left', self.us_data[0]))
             
             # Publish Front Right
-            range_msg_right = self.create_range_msg('ultrasonic_front_right', d2)
-            self.pub_right.publish(range_msg_right)
+            self.pub_right.publish(self.create_range_msg('ultrasonic_front_right', self.us_data[1]))
 
         except Exception as e:
             self.get_logger().warn(f"Ultrasonic read error: {e}")
 
-    def create_range_msg(self, frame_id, distance_cm):
+    def create_range_msg(self, frame_id, distance_m):
         msg = Range()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = frame_id
@@ -51,7 +72,7 @@ class UltrasonicNode(Node):
         msg.field_of_view = 0.523 # Approx 30 degrees
         msg.min_range = 0.02
         msg.max_range = 2.0
-        msg.range = float(distance_cm) / 100.0 # Convert to meters
+        msg.range = distance_m
         return msg
 
 def main(args=None):

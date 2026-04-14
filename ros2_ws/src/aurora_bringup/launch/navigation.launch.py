@@ -42,15 +42,14 @@ def launch_setup(context, *args, **kwargs):
             executable='controller_server',
             name='controller_server',
             output=output_cfg,
-            arguments=['--ros-args', '--log-level', 'warn'],
-            parameters=[nav2_params_path]
+            parameters=[nav2_params_path],
+            remappings=[('cmd_vel', '/nav_vel')]
         ),
         Node(
             package='nav2_planner',
             executable='planner_server',
             name='planner_server',
             output=output_cfg,
-            arguments=['--ros-args', '--log-level', 'warn'],
             parameters=[nav2_params_path]
         ),
         Node(
@@ -58,7 +57,8 @@ def launch_setup(context, *args, **kwargs):
             executable='behavior_server',
             name='behavior_server',
             output=output_cfg,
-            parameters=[nav2_params_path]
+            parameters=[nav2_params_path],
+            remappings=[('cmd_vel', '/nav_vel')]
         ),
         Node(
             package='nav2_bt_navigator',

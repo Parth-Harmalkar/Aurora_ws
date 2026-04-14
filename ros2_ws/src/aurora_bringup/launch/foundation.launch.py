@@ -13,7 +13,7 @@ def generate_launch_description():
     pkg_motor = get_package_share_directory('aurora_motor_driver')
     pkg_odom = get_package_share_directory('aurora_odometry')
     pkg_lidar = get_package_share_directory('sllidar_ros2')
-    pkg_imu = get_package_share_directory('aurora_imu')
+    pkg_imu = get_package_share_directory('aurora_imu_cpp')
     
     # Config Files
     ekf_config = os.path.join(pkg_bringup, 'config', 'ekf.yaml')
@@ -52,7 +52,7 @@ def generate_launch_description():
 
         # 3. Dedicated Hardware IMU Node (BNO055 Bare-Metal Driver - C++ Port)
         Node(
-            package='aurora_imu',
+            package='aurora_imu_cpp',
             executable='bno055_bare',
             name='bno_imu_node',
             output=output_cfg,
@@ -104,7 +104,7 @@ def generate_launch_description():
             name='twist_mux',
             output=output_cfg,
             parameters=[mux_config],
-            remappings=[('/cmd_vel_out', '/cmd_vel_out')] # Standard output
+            remappings=[('cmd_vel', '/cmd_vel_out')] # Arbitrated output
         ),
 
         # 7. Ultrasonic Node (Pub: /ultrasonic/front_left, /ultrasonic/front_right)

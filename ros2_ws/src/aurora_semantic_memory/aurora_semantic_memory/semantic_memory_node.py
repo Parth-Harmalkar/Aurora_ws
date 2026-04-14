@@ -295,7 +295,10 @@ def main(args=None):
     finally:
         node.conn.close()
         node.destroy_node()
-        rclpy.shutdown()
+        try:
+            rclpy.shutdown()
+        except:
+            pass
 
 if __name__ == '__main__':
     main()
