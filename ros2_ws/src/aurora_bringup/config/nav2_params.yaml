@@ -44,11 +44,10 @@ bt_navigator:
     global_frame: map
     robot_base_frame: base_link
     odom_topic: /odom
-    bt_loop_duration: 50
+    bt_loop_duration: 200
     default_server_timeout: 20
-    # use_tree_from_string: ""
-    # default_nav_to_pose_bt_xml: ""
-    # default_nav_through_poses_bt_xml: ""
+    default_nav_to_pose_bt_xml: "/home/aurora/aurora_ws/ros2_ws/src/aurora_bringup/behavior_trees/aurora_nav_bt.xml"
+    default_nav_through_poses_bt_xml: "/home/aurora/aurora_ws/ros2_ws/src/aurora_bringup/behavior_trees/aurora_nav_through_poses_bt.xml"
     goal_blackboard_id: goal
     path_blackboard_id: path
     goals_blackboard_id: goals
@@ -85,7 +84,7 @@ controller_server:
       min_lookahead_dist: 0.2
       max_lookahead_dist: 0.6
       lookahead_time: 1.0
-      rotate_to_heading_angular_vel: 1.5
+      rotate_to_heading_angular_vel: 0.8
       transform_tolerance: 0.1
       use_velocity_scaled_lookahead_dist: true
       min_approach_linear_velocity: 0.05
@@ -95,10 +94,10 @@ controller_server:
       use_regulated_linear_velocity_scaling: true
       regulated_linear_scaling_min_radius: 0.4
       regulated_linear_scaling_min_speed: 0.1
-      use_rotate_to_heading: false
+      use_rotate_to_heading: true
       allow_reversing: false
-      rotate_to_heading_min_angle: 0.4
-      max_angular_accel: 2.5
+      rotate_to_heading_min_angle: 0.2
+      max_angular_accel: 1.5
       max_robot_pose_search_dist: 10.0
       use_interpolation: true
 
@@ -114,12 +113,12 @@ local_costmap:
       width: 3
       height: 3
       resolution: 0.05
-      robot_radius: 0.22
+      robot_radius: 0.18
       plugins: ["obstacle_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.45
+        cost_scaling_factor: 4.0
+        inflation_radius: 0.35
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: True
@@ -131,22 +130,22 @@ local_costmap:
           marking: True
           data_type: "LaserScan"
           raytrace_max_range: 3.0
-          raytrace_min_range: 0.0
+          raytrace_min_range: 0.25
           obstacle_max_range: 2.5
-          obstacle_min_range: 0.0
+          obstacle_min_range: 0.22 # Must be > robot_radius (0.18) to ignore shell
         depth_camera:
           topic: /camera/depth/points
           max_obstacle_height: 1.5
-          min_obstacle_height: 0.15 # Increased for glossy tiles
+          min_obstacle_height: 0.20 # Higher to ignore glossy floor reflections
           clearing: True
           marking: True
           data_type: "PointCloud2"
           raytrace_max_range: 3.0
           raytrace_min_range: 0.25
           obstacle_max_range: 2.5
-          obstacle_min_range: 0.25
+          obstacle_min_range: 0.5 # Ignore near-field camera noise
           sensor_frame: camera_optical_frame
-          observation_persistence: 0.2
+          observation_persistence: 0.0
       # range_layer REMOVED — ultrasonic safety is handled by failsafe_stop node.
       # Having it here caused 'No range readings' spam that corrupted the costmap.
       static_layer:
@@ -162,12 +161,12 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_link
       use_sim_time: False
-      robot_radius: 0.22
-      resolution: 0.10
-      rolling_window: true
+      robot_radius: 0.18
+      resolution: 0.05
+      rolling_window: false
       width: 10
       height: 10
-      track_unknown_space: false
+      track_unknown_space: true
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
@@ -180,30 +179,30 @@ global_costmap:
           marking: True
           data_type: "LaserScan"
           raytrace_max_range: 3.0
-          raytrace_min_range: 0.0
+          raytrace_min_range: 0.25
           obstacle_max_range: 2.5
-          obstacle_min_range: 0.0
+          obstacle_min_range: 0.22 # Must be > robot_radius (0.18) to ignore shell
         depth_camera:
           topic: /camera/depth/points
           max_obstacle_height: 1.5
-          min_obstacle_height: 0.15 # Increased for glossy tiles
+          min_obstacle_height: 0.20 # Higher to ignore glossy floor reflections
           clearing: True
           marking: True
           data_type: "PointCloud2"
           raytrace_max_range: 3.0
           raytrace_min_range: 0.2
           obstacle_max_range: 2.5
-          obstacle_min_range: 0.2
+          obstacle_min_range: 0.5 # Ignore near-field camera noise
           sensor_frame: camera_optical_frame
-          observation_persistence: 0.5
+          observation_persistence: 0.0
       # range_layer REMOVED — see local_costmap comment above.
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: True
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.45
+        cost_scaling_factor: 4.0
+        inflation_radius: 0.35
       always_send_full_costmap: True
 
 map_server:
@@ -217,21 +216,34 @@ planner_server:
     use_sim_time: False
     planner_plugins: ["GridBased"]
     GridBased:
-      plugin: "nav2_navfn_planner/NavfnPlanner"
-      tolerance: 0.5
-      use_astar: false
-      allow_unknown: true
+      plugin: "nav2_smac_planner/SmacPlanner2D"
+      tolerance: 0.25
+      allow_unknown: false
+      max_iterations: 1000000
+      max_on_approach_iterations: 1000
+      max_planning_time: 3.5
+      cost_travel_multiplier: 2.0
+      use_final_approach_orientation: false
+      smoother:
+        max_iterations: 1000
+        w_smooth: 0.3
+        w_data: 0.2
+        tolerance: 1.0e-10
+        do_refinement: true
+        refinement_num: 2
 
 behavior_server:
   ros__parameters:
     costmap_topic: local_costmap/costmap_raw
     footprint_topic: local_costmap/published_footprint
     cycle_frequency: 10.0
-    behavior_plugins: ["spin", "backup", "wait"]
+    behavior_plugins: ["spin", "drive_on_heading", "wait"]
     spin:
       plugin: "nav2_behaviors/Spin"
     backup:
       plugin: "nav2_behaviors/BackUp"
+    drive_on_heading:
+      plugin: "nav2_behaviors/DriveOnHeading"
     wait:
       plugin: "nav2_behaviors/Wait"
     global_frame: odom
@@ -239,7 +251,7 @@ behavior_server:
     transform_timeout: 0.1
     use_sim_time: False
     simulate_ahead_time: 2.0
-    max_rotational_vel: 1.0
+    max_rotational_vel: 0.8
     min_rotational_vel: 0.3
     rotational_accel: 2.5
 

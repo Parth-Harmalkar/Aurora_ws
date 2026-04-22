@@ -12,6 +12,8 @@ find_package(aurora_msgs REQUIRED)
 install(DIRECTORY
   launch
   config
+  rviz
+  behavior_trees
   DESTINATION share/${PROJECT_NAME}
 )
 

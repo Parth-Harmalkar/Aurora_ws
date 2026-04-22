@@ -1,0 +1,64 @@
+rtabmap:
+  ros__parameters:
+    use_sim_time: false
+    database_path: "~/.aurora/rtabmap.db"
+    frame_id: "base_link"
+    map_frame_id: "map"
+    odom_frame_id: "odom"
+    subscribe_depth: true
+    subscribe_rgb: true
+    subscribe_scan: true
+    subscribe_imu: true
+    subscribe_odom_info: false
+    approx_sync: true
+    wait_imu_to_init: true
+    queue_size: 30
+    sync_queue_size: 30
+    
+    # === MAPPING MODE: Full VSLAM ===
+    # RTAB-Map Internal Parameters
+    Rtabmap/DetectionRate: "1.0"       # Process every second for good map quality
+    Reg/Force3DoF: "true"             # Constrain to 2D plane (indoor floor robot)
+    
+    RGBD/AngularUpdate: "0.1"         # Only map if turned > 5.7 deg
+    RGBD/LinearUpdate: "0.1"          # Only map if moved > 0.1m
+    RGBD/OptimizeMaxError: "10.0"
+    RGBD/OptimizeFromGraphEnd: "false" # Prevent full-map rotation on odom jumps
+    RGBD/NeighborLinkRefining: "true"  # Better graph closure via ICP
+    RGBD/ProximityBySpace: "true"      # Proximity-based loop closure
+    
+    # Visual Parameters (Balanced for Jetson Orin Nano)
+    Vis/MaxFeatures: "400"            # Good visual features for loop closure
+    Vis/MinInliers: "10"
+    Vis/CorType: "0"                  # Features Matching (Legacy/Stable on Jetson)
+    Vis/BundleAdjustment: "1"
+    Vis/MaxError: "0.05"
+    
+    # Odometry Quality Control
+    Odom/ResetCountdown: "1"
+    
+    # Grid & Mapping (Optimized for Indoor Tiles)
+    Grid/FromDepth: "false"           # Use Grid/Sensor choice
+    Grid/3D: "true"
+    Grid/Sensor: "0"                  # 0=laser, 1=depth, 2=both. Laser is 10x more accurate for 2D walls.
+    Grid/RayTracing: "true"
+    Grid/MapFrameProjection: "true"   # Corrects for robot pitch/roll
+    Grid/NormalsSegmentation: "true"  # Segment ground from obstacles
+    Grid/MaxGroundAngle: "30"         # Strict ground angle for flat floors
+    Grid/MaxObstacleHeight: "1.5"
+    Grid/CellSize: "0.05"       
+    Grid/MaxGroundHeight: "0.10"      # Prevent floor noise as obstacles
+    Grid/MinGroundHeight: "-0.05"
+    Grid/RangeMin: "0.22"             # Ignore base_link radius (0.18) + shell, map everything else
+    Grid/RangeMax: "5.0"
+    Grid/NoiseFilteringRadius: "0.2"
+    Grid/NoiseFilteringMinNeighbors: "5"
+    
+    # Memory Management
+    Mem/IncrementalMemory: "true"     # Full SLAM - add new data to map
+    Mem/InitWMWithAllNodes: "false"
+    
+    # Cloud Output (Decimated for speed)
+    cloud_decimation: 4
+    cloud_voxel_size: 0.05
+    cloud_output_voxelized: true

@@ -4,6 +4,7 @@ import rclpy
 from rclpy.node import Node
 from aurora_msgs.srv import SaveMap
 from datetime import datetime
+import shutil
 
 class MapSaverNode(Node):
     def __init__(self):
@@ -29,12 +30,25 @@ class MapSaverNode(Node):
         
         result = os.system(cmd)
         
+        # Backup the RTAB-Map database (The "Whole 3D Map")
+        db_src = os.path.expanduser('~/.aurora/rtabmap.db')
+        db_dst = os.path.join(self.maps_dir, f'{map_name}.db')
+        
+        try:
+            if os.path.exists(db_src):
+                shutil.copy2(db_src, db_dst)
+                self.get_logger().info(f'Successfully backed up 3D database to {db_dst}')
+            else:
+                self.get_logger().warn(f'RTAB-Map database not found at {db_src}')
+        except Exception as e:
+            self.get_logger().error(f'Failed to backup database: {str(e)}')
+
         if result == 0:
-            self.get_logger().info(f'Successfully saved map to {map_path}')
-            return True, f'Successfully saved map to {map_path}'
+            self.get_logger().info(f'Successfully saved 2D map to {map_path}')
+            return True, f'Successfully saved 2D and 3D maps to {self.maps_dir}'
         else:
-            self.get_logger().error(f'Failed to save map. Command returned {result}')
-            return False, f'Failed to save map with exit code {result}'
+            self.get_logger().error(f'Failed to save 2D map. Command returned {result}')
+            return False, f'Failed to save 2D map with exit code {result}'
 
     def save_map_callback(self, request, response):
         success, msg = self.save_map(request.map_name)

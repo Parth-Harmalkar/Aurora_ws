@@ -6,16 +6,20 @@ from launch_ros.actions import Node
 def generate_launch_description():
     pkg_bringup = get_package_share_directory('aurora_bringup')
     
-    # Depth to PointCloud2 (CPU-efficient conversion)
+    # Depth to PointCloud2 (Optimized with Decimation)
     depth_to_pc_node = Node(
-        package='depth_image_proc',
-        executable='point_cloud_xyz_node',
+        package='rtabmap_util',
+        executable='point_cloud_xyz',
         name='depth_to_pointcloud',
-        parameters=[{'queue_size': 5}],
+        parameters=[{
+            'decimation': 4,
+            'voxel_size': 0.05,
+            'approx_sync': True
+        }],
         remappings=[
-            ('image_rect', '/camera/depth/image_raw'),
-            ('camera_info', '/camera/color/camera_info'),
-            ('points', '/camera/depth/points')
+            ('depth/image', '/camera/depth/image_raw'),
+            ('depth/camera_info', '/camera/depth/camera_info'),
+            ('cloud', '/camera/depth/points')
         ]
     )
 

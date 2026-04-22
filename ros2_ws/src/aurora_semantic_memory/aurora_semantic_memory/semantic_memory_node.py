@@ -35,6 +35,16 @@ class SemanticMemoryNode(Node):
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self.init_db()
         
+        # Sanity check: verify writability
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("CREATE TABLE IF NOT EXISTS write_test (id INTEGER PRIMARY KEY)")
+            cursor.execute("DROP TABLE write_test")
+            self.conn.commit()
+            self.get_logger().info(f"Database writability verified: {self.db_path}")
+        except Exception as e:
+            self.get_logger().error(f"DATABASE NOT WRITABLE: {e}")
+        
         # 3. TF Buffer and Listener
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
@@ -177,6 +187,7 @@ class SemanticMemoryNode(Node):
                 INSERT INTO objects (label, x, y, z, confidence, timestamp, hit_count)
                 VALUES (?, ?, ?, ?, ?, ?, 1)
             ''', (label, point.x, point.y, point.z, confidence, self.get_clock().now().nanoseconds / 1e9))
+            self.get_logger().info(f"Discovered new {label} at ({point.x:.2f}, {point.y:.2f}, {point.z:.2f})")
             
         self.conn.commit()
 

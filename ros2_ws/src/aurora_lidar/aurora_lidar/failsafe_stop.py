@@ -15,8 +15,6 @@ class FailsafeStopNode(Node):
         
         # Subscriptions
         self.scan_sub = self.create_subscription(LaserScan, '/scan', self.scan_callback, 10)
-        self.us_fl_sub = self.create_subscription(Range, '/ultrasonic/front_left', self.us_callback, 10)
-        self.us_fr_sub = self.create_subscription(Range, '/ultrasonic/front_right', self.us_callback, 10)
         
         # Publisher (Priority 100 in twist_mux)
         self.stop_pub = self.create_publisher(Twist, '/stop_vel', 10)
@@ -24,24 +22,7 @@ class FailsafeStopNode(Node):
         self.stop_triggered = False
         self.last_stop_time = 0
         
-        # Filtering for US sensors
-        self.us_hits = {'front_left': 0, 'front_right': 0}
-        self.MIN_HITS = 3
-        self.US_THRESHOLD = 0.15 # 15cm (tuned to be safer against floor noise)
-        
         self.get_logger().info("Failsafe Stop Layer Initialized (V2: Robust Filtering Enabled)")
-
-    def us_callback(self, msg):
-        frame = msg.header.frame_id
-        side = 'front_left' if 'left' in frame else 'front_right'
-        
-        if msg.range < self.US_THRESHOLD:
-            self.us_hits[side] += 1
-        else:
-            self.us_hits[side] = 0 # Reset on any clear reading for safety
-            
-        if self.us_hits[side] >= self.MIN_HITS:
-            self.trigger_stop(f"Ultrasonic Critical at {msg.range:.2f}m ({side})")
 
     def scan_callback(self, msg):
         # Lidar is at center. robot_radius is 0.22. 
@@ -63,11 +44,8 @@ class FailsafeStopNode(Node):
                 collision_detected = True
                 break
         
-        # Check if US sensors are also clear for auto-reset
-        us_clear = all(h == 0 for h in self.us_hits.values())
-        
         # Auto-reset: if no collision detected, and it's been > 1s since last check
-        if not collision_detected and us_clear and self.stop_triggered:
+        if not collision_detected and self.stop_triggered:
              current_time = self.get_clock().now().nanoseconds / 1e9
              if current_time - self.last_stop_time > 1.0:
                  self.get_logger().info("✅ Failsafe Cleared: Path is now open.")

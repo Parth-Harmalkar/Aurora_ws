@@ -67,12 +67,20 @@ class MotorDriverNode(Node):
             self.get_logger().error(f"Failed to change the baudrate to {self.baudrate}")
             raise RuntimeError(f"Failed to set baudrate {self.baudrate}")
 
+        # Initialize Sync Communication objects
+        # SyncRead for positions (Register 56, length 2 bytes for position)
+        # We read 4 bytes starting at 56 to get both Position and Speed in one go
+        from STservo_sdk import GroupSyncRead
+        self.groupSyncRead = GroupSyncRead(self.packetHandler, 56, 4)
+        self.groupSyncRead.addParam(1)
+        self.groupSyncRead.addParam(2)
+        
         # Initialize motors in Wheel Mode and Enable Torque
         for motor_id in [1, 2, 3, 4]:
             self.packetHandler.WheelMode(motor_id)
             # Register 40 is Torque Enable (1), using the correct SDK method
             self.packetHandler.write1ByteTxRx(motor_id, 40, 1)
-        self.get_logger().info("Motors (1,2,3,4) initialized and Torque Enabled")
+        self.get_logger().info("Motors (1,2,3,4) initialized and Torque Enabled (Sync Mode)")
 
         # Timer for tick publishing and main loop (10Hz)
         self.timer = self.create_timer(0.1, self.main_loop)
@@ -108,31 +116,33 @@ class MotorDriverNode(Node):
         return position
 
     def update_ticks(self):
-        """Fixed tick counting logic from Arjuna_Ticks_Pub.py"""
+        """Optimized tick counting using SyncRead"""
+        # Execute SyncRead for IDs 1 and 2
+        comm_result = self.groupSyncRead.txRxPacket()
+        if comm_result != COMM_SUCCESS:
+            # self.get_logger().warn(f"SyncRead failed: {self.packetHandler.getTxRxResult(comm_result)}")
+            return
+
         # Right Wheel (Motor ID 2)
-        pos_r = self.present_pos(2)
+        pos_r = self.groupSyncRead.getData(2, 56, 2)
         if pos_r is not None:
             raw_ticks_r = int(pos_r / 2.5)
             if self.prev_right_ticks != 0:
                 diff = raw_ticks_r - self.prev_right_ticks
                 if diff > 16000: diff -= 32768
                 elif diff < -16000: diff += 32768
-                
-                # Directional logic based on command (Auto-detect from diff if possible)
                 self.total_right_ticks += diff
             self.prev_right_ticks = raw_ticks_r
 
         # Left Wheel (Motor ID 1)
-        pos_l = self.present_pos(1)
+        pos_l = self.groupSyncRead.getData(1, 56, 2)
         if pos_l is not None:
             raw_ticks_l = int(pos_l / 2.5)
             if self.prev_left_ticks != 0:
                 diff = raw_ticks_l - self.prev_left_ticks
                 if diff > 16000: diff -= 32768
                 elif diff < -16000: diff += 32768
-                
-                # Negate: left motor is commanded with -speed (mirror mount),
-                # so encoder counts backwards. Negate to get forward-positive ticks.
+                # Negate: left motor is commanded with -speed (mirror mount)
                 self.total_left_ticks -= diff
             self.prev_left_ticks = raw_ticks_l
 
@@ -167,32 +177,42 @@ class MotorDriverNode(Node):
             self.left_speed = 0
             self.right_speed = 0
 
-        # Write speeds to motors
+        # Write speeds to motors using SyncWrite
         try:
-            # Left (IDs 1,4)
-            self.packetHandler.WriteSpec(1, -self.left_speed, self.motor_acc)
-            self.packetHandler.WriteSpec(4, -self.left_speed, self.motor_acc)
-            # Right (IDs 2,3)
-            self.packetHandler.WriteSpec(2, self.right_speed, self.motor_acc)
-            self.packetHandler.WriteSpec(3, self.right_speed, self.motor_acc)
-        except AttributeError:
-            # Handle case where speeds aren't set yet
-            pass
+            # SyncWrite uses Register 41 (STS_ACC) and writes 7 bytes
+            # We must use help methods from sts class to format speed
+            # Packet format: [acc, 0, 0, 0, 0, low_speed, high_speed]
+            
+            # Left (IDs 1,4) - Negated due to mirroring
+            l_val = self.packetHandler.sts_toscs(-self.left_speed, 15)
+            l_packet = [self.motor_acc, 0, 0, 0, 0, self.packetHandler.sts_lobyte(l_val), self.packetHandler.sts_hibyte(l_val)]
+            
+            # Right (IDs 2,3) - Positive
+            r_val = self.packetHandler.sts_toscs(self.right_speed, 15)
+            r_packet = [self.motor_acc, 0, 0, 0, 0, self.packetHandler.sts_lobyte(r_val), self.packetHandler.sts_hibyte(r_val)]
+            
+            # Add to SyncWrite
+            self.packetHandler.groupSyncWrite.clearParam()
+            self.packetHandler.groupSyncWrite.addParam(1, l_packet)
+            self.packetHandler.groupSyncWrite.addParam(4, l_packet)
+            self.packetHandler.groupSyncWrite.addParam(2, r_packet)
+            self.packetHandler.groupSyncWrite.addParam(3, r_packet)
+            
+            # Transmit (one packet for all)
+            self.packetHandler.groupSyncWrite.txPacket()
+            
         except Exception as e:
-            self.get_logger().error(f"Motor Write Error: {e}")
+            self.get_logger().error(f"Motor SyncWrite Error: {e}")
 
     def stop_motors(self):
-        """Force motors to zero speed before shutting down"""
-        self.get_logger().info("Safety Shutdown: Stopping all motors.")
+        """Force motors to zero speed using Broadcast ID for instant stop"""
+        self.get_logger().info("Safety Shutdown: Broadcasting STOP to all motors.")
         try:
-            self.packetHandler.WriteSpec(1, 0, self.motor_acc)
-            self.packetHandler.WriteSpec(4, 0, self.motor_acc)
-            self.packetHandler.WriteSpec(2, 0, self.motor_acc)
-            self.packetHandler.WriteSpec(3, 0, self.motor_acc)
-            # Give it a tiny bit of time to send over serial before the port closes
-            time.sleep(0.1)
+            # ID 254 is Broadcast ID for STServo
+            self.packetHandler.WriteSpec(254, 0, self.motor_acc)
+            time.sleep(0.05)
         except Exception as e:
-            self.get_logger().error(f"Failed to stop motors on shutdown: {e}")
+            self.get_logger().error(f"Failed to broadcast stop: {e}")
 
 def main(args=None):
     rclpy.init(args=args)

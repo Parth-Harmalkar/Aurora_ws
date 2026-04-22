@@ -1,0 +1,64 @@
+rtabmap:
+  ros__parameters:
+    use_sim_time: false
+    database_path: "~/.aurora/rtabmap.db"
+    frame_id: "base_link"
+    map_frame_id: "map"
+    odom_frame_id: "odom"
+    subscribe_depth: true
+    subscribe_rgb: true
+    subscribe_scan: true
+    subscribe_imu: true
+    subscribe_odom_info: false
+    approx_sync: true
+    wait_imu_to_init: true
+    queue_size: 30
+    sync_queue_size: 30
+    
+    # === LOCALIZATION MODE: Lightweight, no map updates ===
+    # RTAB-Map Internal Parameters
+    Rtabmap/DetectionRate: "0.5"      # Check location every 2 seconds (saves CPU)
+    Reg/Force3DoF: "true"             # Constrain to 2D plane (indoor floor robot)
+    
+    RGBD/AngularUpdate: "0.1"
+    RGBD/LinearUpdate: "0.1"
+    RGBD/OptimizeMaxError: "10.0"
+    RGBD/OptimizeFromGraphEnd: "false"
+    RGBD/NeighborLinkRefining: "true"
+    RGBD/ProximityBySpace: "true"
+    
+    # Visual Parameters (Reduced for localization — fewer features needed)
+    Vis/MaxFeatures: "200"
+    Vis/MinInliers: "10"
+    Vis/CorType: "0"
+    Vis/BundleAdjustment: "1"
+    Vis/MaxError: "0.05"
+    
+    # Odometry Quality Control
+    Odom/ResetCountdown: "1"
+    
+    # Grid & Mapping (Lidar-only for grid in localization — depth handled by Nav2 costmap)
+    Grid/FromDepth: "false"
+    Grid/3D: "true"
+    Grid/Sensor: "2"                  # 0=laser only (Nav2 costmap uses depth separately)
+    Grid/RayTracing: "true"
+    Grid/MapFrameProjection: "true"
+    Grid/NormalsSegmentation: "true"
+    Grid/MaxGroundAngle: "30"
+    Grid/MaxObstacleHeight: "1.5"
+    Grid/CellSize: "0.05"       
+    Grid/MaxGroundHeight: "0.10"
+    Grid/MinGroundHeight: "-0.05"
+    Grid/RangeMin: "0.30"
+    Grid/RangeMax: "5.0"
+    Grid/NoiseFilteringRadius: "0.2"
+    Grid/NoiseFilteringMinNeighbors: "5"
+    
+    # Memory Management — LOCALIZATION MODE
+    Mem/IncrementalMemory: "false"    # Do NOT update the map
+    Mem/InitWMWithAllNodes: "true"    # Load all map nodes for relocalization
+    
+    # Cloud Output — Enabled for RViz visualization
+    cloud_decimation: 4
+    cloud_voxel_size: 0.05
+    cloud_output_voxelized: true
