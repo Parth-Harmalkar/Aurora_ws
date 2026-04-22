@@ -17,8 +17,8 @@ def generate_launch_description():
             'approx_sync': True
         }],
         remappings=[
-            ('depth/image', '/camera/depth/image_raw'),
-            ('depth/camera_info', '/camera/depth/camera_info'),
+            ('depth/image', '/oak/stereo/image_raw'),
+            ('depth/camera_info', '/oak/rgb/camera_info'),
             ('cloud', '/camera/depth/points')
         ]
     )

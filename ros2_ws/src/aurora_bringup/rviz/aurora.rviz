@@ -6,19 +6,11 @@ Panels:
       Expanded:
         - /Global Options1
         - /Status1
+        - /Grid1
+        - /TF1
         - /Lidar1
         - /Map Cloud1
-        - /Obstacle Cloud1
-        - /Ground Cloud1
-        - /Occupancy Grid1
-        - /Semantic Map1
         - /Camera1
-        - /Global Costmap1
-        - /Local Costmap1
-        - /Global Plan1
-        - /Local Plan1
-        - /Footprint1
-        - /Goal Pose1
       Splitter Ratio: 0.5
     Tree Height: 549
 Visualization Manager:
@@ -27,7 +19,7 @@ Visualization Manager:
     - Alpha: 0.5
       Cell Size: 1
       Class: rviz_default_plugins/Grid
-      Color: 160; 160; 164
+      Color: 30; 30; 40
       Enabled: true
       Line Style:
         Line Width: 0.03
@@ -50,7 +42,7 @@ Visualization Manager:
       Show Axes: true
       Show Names: true
     - Class: rviz_default_plugins/LaserScan
-      Color: 255; 0; 0
+      Color: 0; 255; 255
       Color Transformer: FlatColor
       Enabled: true
       Name: Lidar
@@ -77,26 +69,26 @@ Visualization Manager:
       Color Transformer: RGB8
       Enabled: true
       Name: Map Cloud
-      Style: Spheres
-      Size (m): 0.02
+      Style: Points
+      Size (pix): 2
       Topic:
         Value: /cloud_map
     - Class: rviz_default_plugins/PointCloud2
-      Color: 255; 0; 0
-      Color Transformer: FlatColor
-      Enabled: true
+      Color: 255; 50; 50
+      Color Transformer: RGB8
+      Enabled: false
       Name: Obstacle Cloud
       Style: Spheres
-      Size (m): 0.02
+      Size (m): 0.03
       Topic:
         Value: /cloud_obstacles
     - Class: rviz_default_plugins/PointCloud2
-      Color: 0; 255; 0
+      Color: 100; 150; 100
       Color Transformer: FlatColor
-      Enabled: true
+      Enabled: false
       Name: Ground Cloud
       Style: Spheres
-      Size (m): 0.02
+      Size (m): 0.03
       Topic:
         Value: /cloud_ground
     - Class: rviz_default_plugins/Map
@@ -114,7 +106,7 @@ Visualization Manager:
       Enabled: true
       Name: Camera
       Topic:
-        Value: /camera/color/image_raw
+        Value: /oak/rgb/image_raw
     - Class: rviz_default_plugins/Map
       Alpha: 0.5
       Enabled: true
@@ -152,7 +144,7 @@ Visualization Manager:
       Topic:
         Value: /goal_pose
   Global Options:
-    Background Color: 48; 48; 48
+    Background Color: 0; 0; 0
     Fixed Frame: map
     Frame Rate: 30
   Tools:

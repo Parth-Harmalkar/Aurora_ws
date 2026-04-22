@@ -37,16 +37,13 @@ def launch_setup(context, *args, **kwargs):
             os.path.join(pkg_bringup, 'config', 'rtabmap_mapping.yaml')
         ],
         remappings=[
-            ('/rgb/image', '/camera/color/image_raw'),
-            ('/depth/image', '/camera/depth/image_raw'),
-            ('/rgb/camera_info', '/camera/color/camera_info'),
-            ('/depth/camera_info', '/camera/color/camera_info'),
-            ('/scan', '/scan'),
-            ('/odom', '/odom'),
-            ('/imu', '/imu/data'),
-            ('/cloud_map', '/cloud_map'),
-            ('/cloud_obstacles', '/cloud_obstacles'),
-            ('/cloud_ground', '/cloud_ground')
+            ('rgb/image', '/oak/rgb/image_raw'),
+            ('depth/image', '/oak/stereo/image_raw'),
+            ('rgb/camera_info', '/oak/rgb/camera_info'),
+            ('depth/camera_info', '/oak/rgb/camera_info'),
+            ('scan', '/scan'),
+            ('odom', '/odom'),
+            ('imu', '/imu/data')
         ],
         arguments=node_args
     )

@@ -25,22 +25,25 @@ class FailsafeStopNode(Node):
         self.get_logger().info("Failsafe Stop Layer Initialized (V2: Robust Filtering Enabled)")
 
     def scan_callback(self, msg):
-        # Lidar is at center. robot_radius is 0.22. 
-        # Anything < 0.20 is likely the robot itself or too close.
-        CHASSIS_LIMIT = 0.20 
-        STOP_THRESHOLD = 0.25 # Stop only for TRUE imminent collision (20-25cm)
+        # Lidar is at center. robot_radius is 0.15. 
+        # Increase CHASSIS_LIMIT to ignore camera bracket and tilted screen.
+        CHASSIS_LIMIT = 0.28 
+        STOP_THRESHOLD = 0.35 # Stop for imminent collision (under 35cm)
         
         ranges = msg.ranges
         num_ranges = len(ranges)
         
-        # Front 45 degree arc (337.5 to 22.5)
-        indices = list(range(int(num_ranges * 337.5 / 360), num_ranges)) + list(range(0, int(num_ranges * 22.5 / 360)))
+        # Lidar is rotated 180 (TF: 3.14159), so robot FRONT is at index 180deg
+        # Front 45 degree arc (157.5 to 202.5)
+        start_idx = int(num_ranges * 157.5 / 360.0)
+        end_idx = int(num_ranges * 202.5 / 360.0)
+        indices = list(range(start_idx, end_idx))
         
         collision_detected = False
         for i in indices:
             r = ranges[i]
             if r > CHASSIS_LIMIT and r < STOP_THRESHOLD:
-                self.trigger_stop(f"Lidar Critical at {r:.2f}m")
+                self.trigger_stop(f"Lidar Front Critical at {r:.2f}m")
                 collision_detected = True
                 break
         

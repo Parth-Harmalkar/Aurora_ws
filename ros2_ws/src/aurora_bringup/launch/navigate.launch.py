@@ -49,10 +49,10 @@ def generate_launch_description():
             os.path.join(pkg_bringup, 'config', 'rtabmap_localization.yaml')
         ],
         remappings=[
-            ('/rgb/image', '/camera/color/image_raw'),
-            ('/depth/image', '/camera/depth/image_raw'),
-            ('/rgb/camera_info', '/camera/color/camera_info'),
-            ('/depth/camera_info', '/camera/color/camera_info'),
+            ('/rgb/image', '/oak/rgb/image_raw'),
+            ('/depth/image', '/oak/stereo/image_raw'),
+            ('/rgb/camera_info', '/oak/rgb/camera_info'),
+            ('/depth/camera_info', '/oak/rgb/camera_info'),
             ('/scan', '/scan'),
             ('/odom', '/odom'),
             ('/imu', '/imu/data'),

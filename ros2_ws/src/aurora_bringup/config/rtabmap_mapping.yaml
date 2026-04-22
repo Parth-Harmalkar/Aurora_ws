@@ -17,7 +17,7 @@ rtabmap:
     
     # === MAPPING MODE: Full VSLAM ===
     # RTAB-Map Internal Parameters
-    Rtabmap/DetectionRate: "1.0"       # Process every second for good map quality
+    Rtabmap/DetectionRate: "1.0"       # Standard speed (1 Hz) to prevent CPU starvation
     Reg/Force3DoF: "true"             # Constrain to 2D plane (indoor floor robot)
     
     RGBD/AngularUpdate: "0.1"         # Only map if turned > 5.7 deg
@@ -26,12 +26,13 @@ rtabmap:
     RGBD/OptimizeFromGraphEnd: "false" # Prevent full-map rotation on odom jumps
     RGBD/NeighborLinkRefining: "true"  # Better graph closure via ICP
     RGBD/ProximityBySpace: "true"      # Proximity-based loop closure
+    RGBD/Decimation: "4"               # Decimate depth image to reduce processing payload
     
     # Visual Parameters (Balanced for Jetson Orin Nano)
-    Vis/MaxFeatures: "400"            # Good visual features for loop closure
+    Vis/MaxFeatures: "500"            # Reduced features to lower CPU load (500 is stable)
     Vis/MinInliers: "10"
     Vis/CorType: "0"                  # Features Matching (Legacy/Stable on Jetson)
-    Vis/BundleAdjustment: "1"
+    Vis/BundleAdjustment: "0"         # Disable BA for lower CPU usage on Orin Nano
     Vis/MaxError: "0.05"
     
     # Odometry Quality Control
@@ -40,17 +41,17 @@ rtabmap:
     # Grid & Mapping (Optimized for Indoor Tiles)
     Grid/FromDepth: "false"           # Use Grid/Sensor choice
     Grid/3D: "true"
-    Grid/Sensor: "0"                  # 0=laser, 1=depth, 2=both. Laser is 10x more accurate for 2D walls.
+    Grid/Sensor: "2"                  # 0=laser, 1=depth, 2=both. Use both for full 3D obstacle sensing.
     Grid/RayTracing: "true"
     Grid/MapFrameProjection: "true"   # Corrects for robot pitch/roll
     Grid/NormalsSegmentation: "true"  # Segment ground from obstacles
     Grid/MaxGroundAngle: "30"         # Strict ground angle for flat floors
     Grid/MaxObstacleHeight: "1.5"
-    Grid/CellSize: "0.05"       
+    Grid/CellSize: "0.05"             # 5cm grid resolution for standard lightweight mapping
     Grid/MaxGroundHeight: "0.10"      # Prevent floor noise as obstacles
     Grid/MinGroundHeight: "-0.05"
-    Grid/RangeMin: "0.22"             # Ignore base_link radius (0.18) + shell, map everything else
-    Grid/RangeMax: "5.0"
+    Grid/RangeMin: "0.28"             # Ignore base_link radius (0.15) + bracket, map everything else
+    Grid/RangeMax: "4.0"              # Long-range vision for large rooms
     Grid/NoiseFilteringRadius: "0.2"
     Grid/NoiseFilteringMinNeighbors: "5"
     
@@ -60,5 +61,5 @@ rtabmap:
     
     # Cloud Output (Decimated for speed)
     cloud_decimation: 4
-    cloud_voxel_size: 0.05
-    cloud_output_voxelized: true
+    cloud_voxel_size: 0.05            # Re-enable voxel filtering (5cm)
+    cloud_output_voxelized: true      # Voxelize to keep pointcloud light in RViz

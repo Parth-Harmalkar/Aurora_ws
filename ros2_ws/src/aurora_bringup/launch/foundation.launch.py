@@ -10,6 +10,7 @@ def generate_launch_description():
     
     # Package Directories
     pkg_bringup = get_package_share_directory('aurora_bringup')
+    pkg_camera = get_package_share_directory('aurora_camera')
     pkg_motor = get_package_share_directory('aurora_motor_driver')
     pkg_odom = get_package_share_directory('aurora_odometry')
     pkg_lidar = get_package_share_directory('sllidar_ros2')
@@ -115,12 +116,11 @@ def generate_launch_description():
             output=output_cfg
         ),
 
-        # 9. Camera Node (Pub: camera/image_raw, camera/depth)
-        Node(
-            package='aurora_camera',
-            executable='camera_node',
-            name='camera_node',
-            output=output_cfg
+        # 9. Camera Stack (C++ Driver - OAK-D Lite Optimized)
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                os.path.join(pkg_bringup, 'launch', 'camera_v2.launch.py')
+            )
         ),
 
         # 10. Failsafe Stop Node (Layer-0 Safety)
@@ -163,7 +163,7 @@ def generate_launch_description():
             name='camera_link_to_optical',
             output=output_cfg,
             # Optical frame: X-right, Y-down, Z-forward
-            arguments=['0', '0', '0', '-0.5', '0.5', '-0.5', '0.5', 'camera_link', 'camera_optical_frame']
+            arguments=['0', '0', '0', '-0.5', '0.5', '-0.5', '0.5', 'camera_link', 'oak_rgb_camera_optical_frame']
         ),
         # Bridge Camera IMU to Optical Frame (Identity since BMI270 is PCB-aligned with sensors)
         Node(
@@ -171,7 +171,7 @@ def generate_launch_description():
             executable='static_transform_publisher',
             name='optical_to_imu',
             output=output_cfg,
-            arguments=['0', '0', '0', '0', '0', '0', '1', 'camera_optical_frame', 'camera_imu_optical_frame']
+            arguments=['0', '0', '0', '0', '0', '0', '1', 'oak_rgb_camera_optical_frame', 'camera_imu_optical_frame']
         ),
         Node(
             package='tf2_ros',
